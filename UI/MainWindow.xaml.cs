@@ -19,6 +19,7 @@ namespace xScanner.UI
             _database = new ScanDatabase();
             _clamManager = new ClamAvManager(_database);
             _orchestrator = new ScanOrchestrator(_database, _clamManager);
+            ThemeHelper.ApplyTheme(this);
 
             LoadStatus();
         }
@@ -54,6 +55,7 @@ namespace xScanner.UI
                             TxtStatus.Text = progress.ThreatsDetected > 0 ? "THREATS" : "CLEAN";
                             TxtStatus.Foreground = progress.ThreatsDetected > 0 ? System.Windows.Media.Brushes.Red : System.Windows.Media.Brushes.Green;
                             TxtProgress.Text = "Scan completed.";
+                            System.Media.SystemSounds.Asterisk.Play();
                         }
                     });
                 });
@@ -96,6 +98,7 @@ namespace xScanner.UI
                             TxtStatus.Text = progress.ThreatsDetected > 0 ? "THREATS" : "CLEAN";
                             TxtStatus.Foreground = progress.ThreatsDetected > 0 ? System.Windows.Media.Brushes.Red : System.Windows.Media.Brushes.Green;
                             TxtProgress.Text = "Full Scan completed.";
+                            System.Media.SystemSounds.Asterisk.Play();
                         }
                     });
                 });

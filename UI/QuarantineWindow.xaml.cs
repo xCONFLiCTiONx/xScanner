@@ -15,6 +15,7 @@ namespace xScanner.UI
             InitializeComponent();
             _database = database;
             _quarantineManager = new QuarantineManager(database);
+            ThemeHelper.ApplyTheme(this);
             LoadQuarantine();
         }
 
@@ -29,7 +30,7 @@ namespace xScanner.UI
             {
                 if (_quarantineManager.RestoreFile(record.Id, record.OriginalPath, record.QuarantinePath))
                 {
-                    MessageBox.Show("File successfully restored.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                    System.Media.SystemSounds.Asterisk.Play();
                     LoadQuarantine();
                 }
                 else

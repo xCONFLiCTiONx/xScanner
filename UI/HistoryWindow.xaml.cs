@@ -15,6 +15,7 @@ namespace xScanner.UI
         {
             InitializeComponent();
             _database = database;
+            ThemeHelper.ApplyTheme(this);
             LoadHistory();
         }
 

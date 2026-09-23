@@ -18,6 +18,7 @@ namespace xScanner.UI
             InitializeComponent();
             _database = database;
             _clamManager = new ClamAvManager(database);
+            ThemeHelper.ApplyTheme(this);
             LoadSettings();
         }
 
@@ -32,7 +33,7 @@ namespace xScanner.UI
                 _ => 1
             };
 
-            TxtClamPath.Text = _database.GetSetting("ClamScanPath", "");
+            TxtClamPath.Text = _clamManager.GetEngineDirectory();
             RefreshClamStatus();
             RefreshExclusions();
         }
@@ -40,9 +41,11 @@ namespace xScanner.UI
         private void RefreshClamStatus()
         {
             bool installed = _clamManager.IsInstalled();
+            TxtClamPath.Text = _clamManager.GetEngineDirectory();
+
             if (installed)
             {
-                TxtClamStatus.Text = $"Status: Installed — Version {ClamAvManager.ClamVersion}";
+                TxtClamStatus.Text = $"Status: Installed — Version {ClamAvManager.ClamVersion} (Path: {_clamManager.GetEngineDirectory()})";
                 TxtClamStatus.Foreground = System.Windows.Media.Brushes.Green;
                 BtnInstallClam.Content = "Reinstall / Update ClamAV";
                 BtnUpdateDefs.IsEnabled = true;
@@ -99,7 +102,8 @@ namespace xScanner.UI
                 bool success = await Task.Run(() => _clamManager.DownloadAndInstallAsync(statusProgress, pctProgress));
                 if (success)
                 {
-                    MessageBox.Show("ClamAV has been successfully installed and definitions updated.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                    // No success messagebox popup as requested; play default notification sound and update status
+                    System.Media.SystemSounds.Asterisk.Play();
                 }
             }
             catch (Exception ex)
@@ -124,7 +128,7 @@ namespace xScanner.UI
                 bool success = await _clamManager.UpdateDefinitionsAsync();
                 if (success)
                 {
-                    MessageBox.Show("Definitions updated successfully.", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
+                    System.Media.SystemSounds.Asterisk.Play();
                     RefreshClamStatus();
                 }
                 else
