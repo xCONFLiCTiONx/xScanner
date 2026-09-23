@@ -67,6 +67,18 @@ namespace xScanner.UI
             LbExclusions.ItemsSource = _database.GetExclusions();
         }
 
+        private void BtnBrowseExclusion_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new Microsoft.Win32.OpenFolderDialog
+            {
+                Title = "Select Folder to Exclude"
+            };
+            if (dialog.ShowDialog() == true)
+            {
+                TxtNewExclusion.Text = dialog.FolderName;
+            }
+        }
+
         private void BtnAddExclusion_Click(object sender, RoutedEventArgs e)
         {
             string path = TxtNewExclusion.Text.Trim();
@@ -102,7 +114,6 @@ namespace xScanner.UI
                 bool success = await Task.Run(() => _clamManager.DownloadAndInstallAsync(statusProgress, pctProgress));
                 if (success)
                 {
-                    // No success messagebox popup as requested; play default notification sound and update status
                     System.Media.SystemSounds.Asterisk.Play();
                 }
             }

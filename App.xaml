@@ -47,6 +47,24 @@
             <Setter Property="Background" Value="{DynamicResource ThemeControlBackground}"/>
             <Setter Property="Foreground" Value="{DynamicResource ThemeTextColor}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="4"/>
+        </Style>
+
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Background" Value="{DynamicResource ThemeCardBackground}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextColor}"/>
+            <Setter Property="Padding" Value="6,4"/>
+            <Style.Triggers>
+                <Trigger Property="IsHighlighted" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource ThemeBorderBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource ThemeTextColor}"/>
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource ThemeBorderBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource ThemeTextColor}"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
 
         <!-- Implicit ListBox Style -->

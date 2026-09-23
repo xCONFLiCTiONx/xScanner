@@ -18,7 +18,7 @@
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" Margin="0,0,10,0">
                 <Button Content="🛡 Quarantine" Click="BtnQuarantine_Click" Margin="5" Padding="8,4"/>
                 <Button Content="📜 History" Click="BtnHistory_Click" Margin="5" Padding="8,4"/>
-                <Button Content="⚙" Click="BtnSettings_Click" FontSize="16" Width="30" Height="30" Margin="5"/>
+                <Button Content="⚙" Click="BtnSettings_Click" FontSize="18" Width="38" Height="32" Margin="5" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
             </StackPanel>
         </DockPanel>
 
