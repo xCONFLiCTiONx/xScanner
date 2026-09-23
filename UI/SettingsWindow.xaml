@@ -1,7 +1,7 @@
 <Window x:Class="xScanner.UI.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Settings" Height="400" Width="400"
+        Title="Settings" Height="520" Width="440"
         ResizeMode="NoResize" WindowStartupLocation="CenterOwner">
     <Grid Margin="15">
         <StackPanel>
@@ -16,15 +16,31 @@
             </StackPanel>
 
             <TextBlock Text="Full Scan Exclusions" FontWeight="Bold" Margin="0,10,0,5"/>
-            <ListBox x:Name="LbExclusions" Height="80" Margin="0,0,0,5"/>
+            <ListBox x:Name="LbExclusions" Height="70" Margin="0,0,0,5"/>
             <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                <TextBox x:Name="TxtNewExclusion" Width="220" Margin="0,0,5,0"/>
-                <Button Content="Add" Click="BtnAddExclusion_Click" Width="70"/>
-                <Button Content="Remove" Click="BtnRemoveExclusion_Click" Width="70" Margin="5,0,0,0"/>
+                <TextBox x:Name="TxtNewExclusion" Width="250" Margin="0,0,5,0"/>
+                <Button Content="Add" Click="BtnAddExclusion_Click" Width="60"/>
+                <Button Content="Remove" Click="BtnRemoveExclusion_Click" Width="65" Margin="5,0,0,0"/>
             </StackPanel>
 
-            <TextBlock Text="ClamAV Path" FontWeight="Bold" Margin="0,10,0,5"/>
-            <TextBox x:Name="TxtClamPath" Margin="0,0,0,15"/>
+            <Separator Margin="0,5,0,10"/>
+
+            <TextBlock Text="ClamAV Engine &amp; Definitions" FontWeight="Bold" Margin="0,0,0,5"/>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                <TextBlock Text="ClamAV Path:" Width="80" VerticalAlignment="Center"/>
+                <TextBox x:Name="TxtClamPath" Width="230" Margin="0,0,5,0"/>
+            </StackPanel>
+
+            <TextBlock x:Name="TxtClamStatus" Text="Status: Checking..." FontSize="12" Foreground="#555555" Margin="80,0,0,5"/>
+            <TextBlock x:Name="TxtDefinitionInfo" Text="Definitions: Unknown" FontSize="12" Foreground="#555555" Margin="80,0,0,10"/>
+
+            <StackPanel Orientation="Horizontal" Margin="80,0,0,10">
+                <Button x:Name="BtnInstallClam" Content="Download / Install ClamAV" Click="BtnInstallClam_Click" Width="180" Height="30" Background="#28A745" Foreground="White" FontWeight="Bold"/>
+                <Button x:Name="BtnUpdateDefs" Content="Update Definitions" Click="BtnUpdateDefs_Click" Width="130" Height="30" Margin="10,0,0,0" Background="#17A2B8" Foreground="White"/>
+            </StackPanel>
+
+            <ProgressBar x:Name="PbInstall" Height="15" Margin="80,0,0,10" Maximum="100" Value="0" Visibility="Collapsed"/>
+            <TextBlock x:Name="TxtInstallProgress" Text="" FontSize="11" Foreground="#666666" Margin="80,0,0,10"/>
 
             <Button Content="Save Settings" Click="BtnSave_Click" Width="120" Height="30" HorizontalAlignment="Right" Background="#007ACC" Foreground="White" FontWeight="Bold"/>
         </StackPanel>
