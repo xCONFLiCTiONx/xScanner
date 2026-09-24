@@ -39,12 +39,21 @@ namespace xScanner.UI
 
         public void ShowFromTray()
         {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(ShowFromTray);
+                return;
+            }
+
             Show();
             if (WindowState == WindowState.Minimized)
             {
                 WindowState = WindowState.Normal;
             }
             Activate();
+            Topmost = true;
+            Topmost = false;
+            Focus();
         }
 
         public async void ExitApplication()
@@ -58,6 +67,156 @@ namespace xScanner.UI
             _isShutdownCompleted = true;
             Close();
             System.Windows.Application.Current.Shutdown();
+        }
+
+        public async void StartScheduledScan()
+        {
+            string mode = _database.GetSetting("AutomaticScanMode", "Basic");
+            if (mode.Equals("Disabled", StringComparison.OrdinalIgnoreCase))
+            {
+                LogTerminal("[INFO] Automatic scan mode is set to Disabled. Exiting scheduled run.");
+                _trayManager?.Dispose();
+                System.Windows.Application.Current.Shutdown();
+                Environment.Exit(0);
+                return;
+            }
+
+            _trayManager?.ShowNotification(
+                "xScanner Scheduled Scan",
+                "A scheduled background scan has started. Double-click the tray icon to view progress.",
+                System.Windows.Forms.ToolTipIcon.Info
+            );
+            _trayManager?.UpdateStatus($"Scheduled {mode} Scan Running...");
+
+            _isScanning = true;
+            _scanCts = new CancellationTokenSource();
+            var token = _scanCts.Token;
+
+            SetScanButtonsEnabled(false);
+            TxtStatus.Text = "SCANNING";
+            TxtStatus.Foreground = System.Windows.Media.Brushes.DarkOrange;
+            ScanProgressBar.IsIndeterminate = true;
+            ScanProgressBar.Value = 0;
+
+            LogTerminal($"[INFO] Starting Scheduled {mode} Scan...");
+
+            long threatsDetected = 0;
+
+            _activeScanTask = Task.Run(async () =>
+            {
+                try
+                {
+                    LogTerminal("[INFO] Updating ClamAV definitions...");
+                    await _clamManager.UpdateDefinitionsAsync(token);
+                    if (token.IsCancellationRequested) return;
+                    LogTerminal("[INFO] Definitions update check finished.");
+
+                    if (mode.Equals("Full", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var exclusions = _database.GetExclusions();
+                        await _orchestrator.RunFullScanAsync(exclusions, progress =>
+                        {
+                            _ = Dispatcher.BeginInvoke(new Action(() =>
+                            {
+                                if (_isShutdownInProgress) return;
+
+                                if (!string.IsNullOrEmpty(progress.LogMessage))
+                                {
+                                    LogTerminal(progress.LogMessage);
+                                }
+                                TxtProgress.Text = progress.CurrentFile;
+                                TxtFilesScanned.Text = $"Files Scanned: {progress.FilesScanned}";
+                                TxtThreatsFound.Text = $"Threats Found: {progress.ThreatsDetected}";
+
+                                ScanProgressBar.IsIndeterminate = progress.IsIndeterminate;
+                                if (!progress.IsIndeterminate && progress.TotalFiles > 0)
+                                {
+                                    ScanProgressBar.Maximum = progress.TotalFiles;
+                                    ScanProgressBar.Value = progress.FilesExamined;
+                                }
+
+                                if (progress.IsCompleted)
+                                {
+                                    threatsDetected = progress.ThreatsDetected;
+                                    ScanProgressBar.Value = ScanProgressBar.Maximum > 0 ? ScanProgressBar.Maximum : 100;
+                                    ScanProgressBar.IsIndeterminate = false;
+                                    TxtLastScan.Text = $"Last Scan: {DateTime.Now:g}";
+                                    TxtStatus.Text = progress.ThreatsDetected > 0 ? "THREATS" : "CLEAN";
+                                    TxtStatus.Foreground = progress.ThreatsDetected > 0 ? System.Windows.Media.Brushes.Red : System.Windows.Media.Brushes.Green;
+                                    TxtProgress.Text = "Scheduled scan completed.";
+                                    LogTerminal($"[INFO] Scheduled Scan completed. Examined: {progress.FilesExamined}, Scanned: {progress.FilesScanned}, Threats: {progress.ThreatsDetected}");
+                                    _trayManager?.UpdateStatus("Scheduled Scan Complete");
+                                }
+                            }));
+                        }, token);
+                    }
+                    else
+                    {
+                        await _orchestrator.RunBasicScanAsync(progress =>
+                        {
+                            _ = Dispatcher.BeginInvoke(new Action(() =>
+                            {
+                                if (_isShutdownInProgress) return;
+
+                                if (!string.IsNullOrEmpty(progress.LogMessage))
+                                {
+                                    LogTerminal(progress.LogMessage);
+                                }
+                                TxtProgress.Text = progress.CurrentFile;
+                                TxtFilesScanned.Text = $"Files Scanned: {progress.FilesScanned}";
+                                TxtThreatsFound.Text = $"Threats Found: {progress.ThreatsDetected}";
+
+                                ScanProgressBar.IsIndeterminate = progress.IsIndeterminate;
+                                if (!progress.IsIndeterminate && progress.TotalFiles > 0)
+                                {
+                                    ScanProgressBar.Maximum = progress.TotalFiles;
+                                    ScanProgressBar.Value = progress.FilesExamined;
+                                }
+
+                                if (progress.IsCompleted)
+                                {
+                                    threatsDetected = progress.ThreatsDetected;
+                                    ScanProgressBar.Value = ScanProgressBar.Maximum > 0 ? ScanProgressBar.Maximum : 100;
+                                    ScanProgressBar.IsIndeterminate = false;
+                                    TxtLastScan.Text = $"Last Scan: {DateTime.Now:g}";
+                                    TxtStatus.Text = progress.ThreatsDetected > 0 ? "THREATS" : "CLEAN";
+                                    TxtStatus.Foreground = progress.ThreatsDetected > 0 ? System.Windows.Media.Brushes.Red : System.Windows.Media.Brushes.Green;
+                                    TxtProgress.Text = "Scheduled scan completed.";
+                                    LogTerminal($"[INFO] Scheduled Scan completed. Examined: {progress.FilesExamined}, Scanned: {progress.FilesScanned}, Threats: {progress.ThreatsDetected}");
+                                    _trayManager?.UpdateStatus("Scheduled Scan Complete");
+                                }
+                            }));
+                        }, token);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    Dispatcher.Invoke(() => LogTerminal("[INFO] Scheduled scan cancelled."));
+                }
+                catch (Exception ex)
+                {
+                    Dispatcher.Invoke(() => LogTerminal($"[ERROR] Scheduled scan failed: {ex.Message}"));
+                }
+                finally
+                {
+                    _isScanning = false;
+                }
+            }, token);
+
+            await _activeScanTask;
+
+            string resultText = threatsDetected > 0
+                ? $"Scheduled scan complete. WARNING: {threatsDetected} threat(s) detected!"
+                : "Scheduled scan complete. No threats detected.";
+
+            _trayManager?.ShowNotification(
+                "xScanner Scheduled Scan Complete",
+                resultText,
+                threatsDetected > 0 ? System.Windows.Forms.ToolTipIcon.Warning : System.Windows.Forms.ToolTipIcon.Info
+            );
+
+            await Task.Delay(2500);
+            ExitApplication();
         }
 
         private void LoadStatus()
