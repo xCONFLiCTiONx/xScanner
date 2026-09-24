@@ -64,7 +64,7 @@
 
                     <!-- Progress Bar -->
                     <ProgressBar x:Name="ScanProgressBar" Height="8" Width="440" Margin="0,0,0,6" IsIndeterminate="False" Value="0" Maximum="100"/>
-                    <TextBlock x:Name="TxtProgress" Text="Ready to scan" FontSize="11" Foreground="{DynamicResource ThemeSubTextColor}" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" Width="440"/>
+                    <TextBlock x:Name="TxtProgress" Text="Ready to scan" FontSize="11" Foreground="{DynamicResource ThemeSubTextColor}" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" Width="440" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
                 </StackPanel>
             </Border>
         </StackPanel>

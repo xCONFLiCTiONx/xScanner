@@ -13,7 +13,14 @@
         <DataGrid x:Name="DgQuarantine" AutoGenerateColumns="False" IsReadOnly="True" Margin="0,0,0,10">
             <DataGrid.Columns>
                 <DataGridTextColumn Header="Threat Name" Binding="{Binding ThreatName}" Width="120"/>
-                <DataGridTextColumn Header="Original Path" Binding="{Binding OriginalPath}" Width="200"/>
+                <DataGridTextColumn Header="Original Path" Binding="{Binding OriginalPath}" Width="200">
+                    <DataGridTextColumn.ElementStyle>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="ToolTip" Value="{Binding OriginalPath}"/>
+                            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                        </Style>
+                    </DataGridTextColumn.ElementStyle>
+                </DataGridTextColumn>
                 <DataGridTextColumn Header="Time" Binding="{Binding QuarantineTime}" Width="130"/>
             </DataGrid.Columns>
         </DataGrid>
