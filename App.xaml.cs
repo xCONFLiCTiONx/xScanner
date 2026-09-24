@@ -1,4 +1,5 @@
 using System.Windows;
+using xScanner.UI;
 
 namespace xScanner
 {
@@ -6,6 +7,8 @@ namespace xScanner
     {
         private void Application_Startup(object sender, StartupEventArgs e)
         {
+            ThemeHelper.InitializeTheme();
+
             bool isScheduled = false;
             foreach (var arg in e.Args)
             {

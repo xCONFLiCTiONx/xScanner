@@ -27,7 +27,6 @@ namespace xScanner.UI
         private void LoadStatus()
         {
             string lastUp = _database.GetSetting("LastDefinitionUpdate", "Today");
-            TxtDefinitionStatus.Text = $"Last Update: {lastUp}";
             TxtClamStatus.Text = $"ClamAV: {_clamManager.GetDefinitionVersion()}";
         }
 

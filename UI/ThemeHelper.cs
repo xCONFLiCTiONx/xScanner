@@ -7,23 +7,14 @@ namespace xScanner.UI
 {
     public static class ThemeHelper
     {
-        public static bool IsDarkTheme()
+        static ThemeHelper()
         {
-            try
-            {
-                using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
-                if (key != null)
-                {
-                    object? val = key.GetValue("AppsUseLightTheme");
-                    if (val is int i && i == 0) return true;
-                }
-            }
-            catch { }
-            return false;
+            InitializeTheme();
         }
 
-        public static void ApplyTheme(Window window)
+        public static void InitializeTheme()
         {
+            if (Application.Current == null) return;
             bool isDark = IsDarkTheme();
 
             var resources = Application.Current.Resources;
@@ -52,7 +43,27 @@ namespace xScanner.UI
                 resources["ThemeControlBackground"] = new SolidColorBrush(Color.FromRgb(239, 239, 239));
                 resources["ThemeStatusBarBackground"] = new SolidColorBrush(Color.FromRgb(234, 234, 234));
             }
+        }
 
+        public static bool IsDarkTheme()
+        {
+            try
+            {
+                using var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+                if (key != null)
+                {
+                    object? val = key.GetValue("AppsUseLightTheme");
+                    if (val is int i && i == 0) return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        public static void ApplyTheme(Window window)
+        {
+            InitializeTheme();
+            var resources = Application.Current.Resources;
             window.Background = (Brush)resources["ThemeWindowBackground"];
         }
     }
