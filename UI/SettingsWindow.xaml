@@ -1,7 +1,7 @@
 <Window x:Class="xScanner.UI.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Settings" Height="560" Width="540"
+        Title="Settings" Height="650" Width="540"
         ResizeMode="NoResize" WindowStartupLocation="CenterOwner"
         Background="{DynamicResource ThemeWindowBackground}">
     <Grid Margin="20">
@@ -43,6 +43,15 @@
 
             <ProgressBar x:Name="PbInstall" Height="15" Margin="100,0,0,10" Maximum="100" Value="0" Visibility="Collapsed"/>
             <TextBlock x:Name="TxtInstallProgress" Text="" FontSize="11" Foreground="{DynamicResource ThemeSubTextColor}" Margin="100,0,0,10"/>
+
+            <Separator Margin="0,5,0,10"/>
+
+            <TextBlock Text="Scheduled Task (Weekly 1 AM Scan)" FontWeight="Bold" Margin="0,0,0,5" Foreground="{DynamicResource ThemeTextColor}"/>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                <Button x:Name="BtnScheduleTask" Content="Create Scheduled Scan (1 AM, Wake PC)" Click="BtnScheduleTask_Click" Width="270" Height="30" Margin="0,0,10,0" Background="#007ACC" Foreground="White" FontWeight="Bold"/>
+                <TextBlock x:Name="TxtTaskStatus" Text="Status: Checking..." VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource ThemeSubTextColor}"/>
+            </StackPanel>
+            <TextBlock Text="Runs once a week at 1:00 AM with highest privileges, wakes PC if asleep, and auto-closes when complete." FontSize="11" Foreground="{DynamicResource ThemeSubTextColor}" Margin="0,0,0,15"/>
 
             <Button Content="Save Settings" Click="BtnSave_Click" Width="120" Height="30" HorizontalAlignment="Right" Background="#007ACC" Foreground="White" FontWeight="Bold"/>
         </StackPanel>

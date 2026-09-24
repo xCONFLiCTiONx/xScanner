@@ -13,7 +13,7 @@
 - **Graceful Error Handling**: Safely handles locked, busy, or permission-restricted files during enumeration and scanning without crashing or interrupting the scan workflow.
 - **Suspicious File Escalation**: Automatically deep-dives into surrounding directories, temp locations, and persistence mechanisms when suspicious activity is detected.
 - **Secure Quarantine**: Isolates detected threats in a dedicated quarantine directory with atomic file operations, supporting restoration or permanent deletion.
-- **Task Scheduler Integration**: Supports automated background scans via Windows Task Scheduler (`/scheduled` command-line argument) and exits cleanly upon completion.
+- **Task Scheduler Integration**: Supports automated background scans via Windows Task Scheduler (`/scheduled` command-line argument). Includes a Settings option to easily configure a weekly scan at 1 AM with PC wake support, displaying real-time registration status.
 
 ---
 

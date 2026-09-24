@@ -14,11 +14,14 @@ namespace xScanner.UI
         private readonly ScanDatabase _database;
         private readonly ClamAvManager _clamManager;
         private readonly ScanOrchestrator _orchestrator;
+        private SystemTrayManager? _trayManager;
         private bool _isScanning = false;
         private CancellationTokenSource? _scanCts;
         private Task? _activeScanTask;
         private bool _isShutdownInProgress = false;
         private bool _isShutdownCompleted = false;
+        private bool _isExplicitExit = false;
+        private bool _hasShownTrayTip = false;
 
         public MainWindow()
         {
@@ -28,8 +31,33 @@ namespace xScanner.UI
             _orchestrator = new ScanOrchestrator(_database, _clamManager);
             ThemeHelper.ApplyTheme(this);
 
+            _trayManager = new SystemTrayManager(ShowFromTray, ExitApplication);
+
             LoadStatus();
             LogTerminal("[INFO] xScanner initialized successfully. Ready.");
+        }
+
+        public void ShowFromTray()
+        {
+            Show();
+            if (WindowState == WindowState.Minimized)
+            {
+                WindowState = WindowState.Normal;
+            }
+            Activate();
+        }
+
+        public async void ExitApplication()
+        {
+            _isExplicitExit = true;
+            if (_isShutdownInProgress) return;
+
+            _isShutdownInProgress = true;
+            await PerformShutdownCleanupAsync();
+            _trayManager?.Dispose();
+            _isShutdownCompleted = true;
+            Close();
+            System.Windows.Application.Current.Shutdown();
         }
 
         private void LoadStatus()
@@ -69,6 +97,7 @@ namespace xScanner.UI
             TxtStatus.Foreground = System.Windows.Media.Brushes.DarkOrange;
             ScanProgressBar.IsIndeterminate = true;
             ScanProgressBar.Value = 0;
+            _trayManager?.UpdateStatus("Scanning in progress...");
 
             LogTerminal("[INFO] Starting Basic Scan...");
 
@@ -111,6 +140,7 @@ namespace xScanner.UI
                                 TxtStatus.Foreground = progress.ThreatsDetected > 0 ? System.Windows.Media.Brushes.Red : System.Windows.Media.Brushes.Green;
                                 TxtProgress.Text = "Scan completed.";
                                 LogTerminal($"[INFO] Basic Scan completed. Examined: {progress.FilesExamined}, Scanned: {progress.FilesScanned}, Threats: {progress.ThreatsDetected}");
+                                _trayManager?.UpdateStatus("Ready");
                                 System.Media.SystemSounds.Asterisk.Play();
                             }
                         }));
@@ -124,20 +154,29 @@ namespace xScanner.UI
                 {
                     Dispatcher.Invoke(() =>
                     {
-                        MessageBox.Show($"Scan error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        System.Windows.MessageBox.Show($"Scan error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                         TxtStatus.Text = "ERROR";
                         LogTerminal($"[ERROR] Scan failed: {ex.Message}");
+                        _trayManager?.UpdateStatus("Scan Error");
                     });
                 }
                 finally
                 {
                     Dispatcher.Invoke(() =>
                     {
+                        bool wasCancelled = _scanCts != null && _scanCts.IsCancellationRequested;
                         _isScanning = false;
                         if (!_isShutdownInProgress)
                         {
                             SetScanButtonsEnabled(true);
                             ScanProgressBar.IsIndeterminate = false;
+                            if (wasCancelled)
+                            {
+                                TxtStatus.Text = "STOPPED";
+                                TxtStatus.Foreground = System.Windows.Media.Brushes.Gray;
+                                TxtProgress.Text = "Scan stopped by user.";
+                                _trayManager?.UpdateStatus("Scan Stopped");
+                            }
                             LoadStatus();
                         }
                     });
@@ -159,6 +198,7 @@ namespace xScanner.UI
             TxtStatus.Foreground = System.Windows.Media.Brushes.DarkOrange;
             ScanProgressBar.IsIndeterminate = true;
             ScanProgressBar.Value = 0;
+            _trayManager?.UpdateStatus("Full Scan in progress...");
 
             LogTerminal("[INFO] Starting Full Scan across fixed drives...");
 
@@ -207,6 +247,7 @@ namespace xScanner.UI
                                 TxtStatus.Foreground = progress.ThreatsDetected > 0 ? System.Windows.Media.Brushes.Red : System.Windows.Media.Brushes.Green;
                                 TxtProgress.Text = "Full Scan completed.";
                                 LogTerminal($"[INFO] Full Scan completed. Examined: {progress.FilesExamined}, Scanned: {progress.FilesScanned}, Threats: {progress.ThreatsDetected}");
+                                _trayManager?.UpdateStatus("Ready");
                                 System.Media.SystemSounds.Asterisk.Play();
                             }
                         }));
@@ -220,20 +261,29 @@ namespace xScanner.UI
                 {
                     Dispatcher.Invoke(() =>
                     {
-                        MessageBox.Show($"Scan error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        System.Windows.MessageBox.Show($"Scan error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                         TxtStatus.Text = "ERROR";
                         LogTerminal($"[ERROR] Full scan failed: {ex.Message}");
+                        _trayManager?.UpdateStatus("Scan Error");
                     });
                 }
                 finally
                 {
                     Dispatcher.Invoke(() =>
                     {
+                        bool wasCancelled = _scanCts != null && _scanCts.IsCancellationRequested;
                         _isScanning = false;
                         if (!_isShutdownInProgress)
                         {
                             SetScanButtonsEnabled(true);
                             ScanProgressBar.IsIndeterminate = false;
+                            if (wasCancelled)
+                            {
+                                TxtStatus.Text = "STOPPED";
+                                TxtStatus.Foreground = System.Windows.Media.Brushes.Gray;
+                                TxtProgress.Text = "Scan stopped by user.";
+                                _trayManager?.UpdateStatus("Scan Stopped");
+                            }
                             LoadStatus();
                         }
                     });
@@ -251,6 +301,24 @@ namespace xScanner.UI
                 return;
             }
 
+            if (!_isExplicitExit)
+            {
+                // User clicked 'X' on window: minimize/hide to System Tray
+                e.Cancel = true;
+                Hide();
+
+                if (!_hasShownTrayTip)
+                {
+                    _hasShownTrayTip = true;
+                    _trayManager?.ShowNotification(
+                        "xScanner System Tray",
+                        "xScanner is running in the system tray. Right-click the icon to open or exit.",
+                        System.Windows.Forms.ToolTipIcon.Info
+                    );
+                }
+                return;
+            }
+
             e.Cancel = true;
 
             if (_isShutdownInProgress)
@@ -261,8 +329,10 @@ namespace xScanner.UI
             _isShutdownInProgress = true;
             await PerformShutdownCleanupAsync();
 
+            _trayManager?.Dispose();
             _isShutdownCompleted = true;
             Close();
+            System.Windows.Application.Current.Shutdown();
         }
 
         private async Task PerformShutdownCleanupAsync()
@@ -340,10 +410,22 @@ namespace xScanner.UI
             await Task.Delay(350);
         }
 
-        private void SetScanButtonsEnabled(bool enabled)
+        private void BtnStopScan_Click(object sender, RoutedEventArgs e)
         {
-            BtnBasicScan.IsEnabled = enabled;
-            BtnFullScan.IsEnabled = enabled;
+            if (!_isScanning || _scanCts == null || _scanCts.IsCancellationRequested) return;
+
+            LogTerminal("[INFO] Stop requested by user. Cancelling active scan...");
+            BtnStopScan.IsEnabled = false;
+            TxtProgress.Text = "Stopping scan...";
+            _scanCts.Cancel();
+            _clamManager.KillActiveProcesses();
+        }
+
+        private void SetScanButtonsEnabled(bool enableStartButtons)
+        {
+            BtnBasicScan.IsEnabled = enableStartButtons && !_isShutdownInProgress;
+            BtnFullScan.IsEnabled = enableStartButtons && !_isShutdownInProgress;
+            BtnStopScan.IsEnabled = !enableStartButtons && _isScanning && !_isShutdownInProgress;
         }
 
         private void BtnQuarantine_Click(object sender, RoutedEventArgs e)

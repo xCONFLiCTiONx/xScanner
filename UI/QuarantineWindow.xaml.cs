@@ -58,7 +58,7 @@ namespace xScanner.UI
 
             if (failedCount > 0)
             {
-                MessageBox.Show($"Failed to restore {failedCount} file(s).", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                System.Windows.MessageBox.Show($"Failed to restore {failedCount} file(s).", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -76,7 +76,7 @@ namespace xScanner.UI
                 ? "Are you sure you want to permanently delete this file?"
                 : $"Are you sure you want to permanently delete {selectedRecords.Count} selected files?";
 
-            if (MessageBox.Show(confirmMsg, "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+            if (System.Windows.MessageBox.Show(confirmMsg, "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
             {
                 foreach (var record in selectedRecords)
                 {

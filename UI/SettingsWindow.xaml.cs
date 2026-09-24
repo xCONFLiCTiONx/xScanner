@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using xScanner.Core.ScanScheduler;
 using xScanner.Database;
 using xScanner.Engines.ClamAV;
 
@@ -36,6 +37,7 @@ namespace xScanner.UI
             TxtClamPath.Text = _clamManager.GetEngineDirectory();
             RefreshClamStatus();
             RefreshExclusions();
+            RefreshScheduleStatus();
         }
 
         private void RefreshClamStatus()
@@ -59,6 +61,25 @@ namespace xScanner.UI
                 BtnInstallClam.Content = "Download / Install ClamAV";
                 BtnUpdateDefs.IsEnabled = false;
                 TxtDefinitionInfo.Text = "Definitions: Not Available";
+            }
+        }
+
+        private void RefreshScheduleStatus()
+        {
+            bool isRegistered = SchedulerManager.IsTaskRegistered(SchedulerManager.DefaultTaskName);
+            if (isRegistered)
+            {
+                TxtTaskStatus.Text = "Status: Registered (1 AM Weekly)";
+                TxtTaskStatus.Foreground = System.Windows.Media.Brushes.Green;
+                BtnScheduleTask.Content = "Remove Scheduled Task";
+                BtnScheduleTask.Background = (System.Windows.Media.Brush?)new System.Windows.Media.BrushConverter().ConvertFrom("#DC3545") ?? System.Windows.Media.Brushes.Red;
+            }
+            else
+            {
+                TxtTaskStatus.Text = "Status: Not Registered";
+                TxtTaskStatus.Foreground = System.Windows.Media.Brushes.Gray;
+                BtnScheduleTask.Content = "Create Scheduled Scan (1 AM, Wake PC)";
+                BtnScheduleTask.Background = (System.Windows.Media.Brush?)new System.Windows.Media.BrushConverter().ConvertFrom("#007ACC") ?? System.Windows.Media.Brushes.Blue;
             }
         }
 
@@ -99,6 +120,37 @@ namespace xScanner.UI
             }
         }
 
+        private void BtnScheduleTask_Click(object sender, RoutedEventArgs e)
+        {
+            bool isRegistered = SchedulerManager.IsTaskRegistered(SchedulerManager.DefaultTaskName);
+            if (isRegistered)
+            {
+                bool removed = SchedulerManager.RemoveSchedule(SchedulerManager.DefaultTaskName);
+                if (removed)
+                {
+                    RefreshScheduleStatus();
+                }
+                else
+                {
+                    TxtTaskStatus.Text = "Status: Failed to remove task";
+                    TxtTaskStatus.Foreground = System.Windows.Media.Brushes.Red;
+                }
+            }
+            else
+            {
+                bool created = SchedulerManager.ConfigureWeeklySchedule(SchedulerManager.DefaultTaskName, "01:00", wakePc: true);
+                if (created)
+                {
+                    RefreshScheduleStatus();
+                }
+                else
+                {
+                    TxtTaskStatus.Text = "Status: Failed to create task (Admin required)";
+                    TxtTaskStatus.Foreground = System.Windows.Media.Brushes.Red;
+                }
+            }
+        }
+
         private async void BtnInstallClam_Click(object sender, RoutedEventArgs e)
         {
             BtnInstallClam.IsEnabled = false;
@@ -119,8 +171,7 @@ namespace xScanner.UI
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"ClamAV installation failed:\n{ex.Message}", "Installation Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                TxtInstallProgress.Text = "Installation failed.";
+                TxtInstallProgress.Text = $"Installation failed: {ex.Message}";
             }
             finally
             {
@@ -144,17 +195,16 @@ namespace xScanner.UI
                 }
                 else
                 {
-                    MessageBox.Show("Definition update failed.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    TxtInstallProgress.Text = "Definition update failed.";
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Update error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                TxtInstallProgress.Text = $"Update error: {ex.Message}";
             }
             finally
             {
                 BtnUpdateDefs.IsEnabled = true;
-                TxtInstallProgress.Text = "";
             }
         }
 

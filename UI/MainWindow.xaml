@@ -57,8 +57,9 @@
                     </Grid>
 
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
-                        <Button x:Name="BtnBasicScan" Content="BASIC SCAN" Click="BtnBasicScan_Click" Width="130" Height="36" Margin="8,0" Background="#007ACC" Foreground="White" FontWeight="Bold" BorderThickness="0"/>
-                        <Button x:Name="BtnFullScan" Content="FULL SCAN" Click="BtnFullScan_Click" Width="130" Height="36" Margin="8,0" Background="#6C757D" Foreground="White" FontWeight="Bold" BorderThickness="0"/>
+                        <Button x:Name="BtnBasicScan" Content="BASIC SCAN" Click="BtnBasicScan_Click" Width="120" Height="36" Margin="5,0" Background="#007ACC" Foreground="White" FontWeight="Bold" BorderThickness="0"/>
+                        <Button x:Name="BtnFullScan" Content="FULL SCAN" Click="BtnFullScan_Click" Width="120" Height="36" Margin="5,0" Background="#6C757D" Foreground="White" FontWeight="Bold" BorderThickness="0"/>
+                        <Button x:Name="BtnStopScan" Content="STOP SCAN" Click="BtnStopScan_Click" Width="120" Height="36" Margin="5,0" Background="#DC3545" Foreground="White" FontWeight="Bold" BorderThickness="0" IsEnabled="False"/>
                     </StackPanel>
 
                     <!-- Progress Bar -->

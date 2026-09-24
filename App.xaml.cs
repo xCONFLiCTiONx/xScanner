@@ -1,19 +1,21 @@
+using System;
 using System.Windows;
 using xScanner.UI;
 
 namespace xScanner
 {
-    public partial class App : Application
+    public partial class App : System.Windows.Application
     {
         private void Application_Startup(object sender, StartupEventArgs e)
         {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
             ThemeHelper.InitializeTheme();
 
             bool isScheduled = false;
             foreach (var arg in e.Args)
             {
-                if (arg.Equals("/scheduled", System.StringComparison.OrdinalIgnoreCase) ||
-                    arg.Equals("-scheduled", System.StringComparison.OrdinalIgnoreCase))
+                if (arg.Equals("/scheduled", StringComparison.OrdinalIgnoreCase) ||
+                    arg.Equals("-scheduled", StringComparison.OrdinalIgnoreCase))
                 {
                     isScheduled = true;
                     break;
@@ -22,7 +24,7 @@ namespace xScanner
 
             if (isScheduled)
             {
-                // Run scheduled scan headless/non-interactive and exit when done
+                // Run scheduled scan with tray notification and auto-close when done
                 RunScheduledScanAsync();
             }
             else
@@ -35,35 +37,78 @@ namespace xScanner
 
         private async void RunScheduledScanAsync()
         {
+            SystemTrayManager? trayManager = null;
             try
             {
-                // Initialize DB and run scheduled automatic scan (Basic or Full as configured)
                 var db = new Database.ScanDatabase();
+
+                string mode = db.GetSetting("AutomaticScanMode", "Basic");
+                if (mode.Equals("Disabled", StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                trayManager = new SystemTrayManager(
+                    onOpenRequested: null,
+                    onExitRequested: () => System.Windows.Application.Current.Shutdown()
+                );
+                trayManager.ShowNotification("xScanner Scheduled Scan", "Scheduled background scan has started.", System.Windows.Forms.ToolTipIcon.Info);
+                trayManager.UpdateStatus("Scheduled Scan Running...");
+
                 var clamManager = new Engines.ClamAV.ClamAvManager(db);
                 var orchestrator = new Core.ScanEngine.ScanOrchestrator(db, clamManager);
 
                 // Update definitions first
                 await clamManager.UpdateDefinitionsAsync();
 
-                // Get configured automatic scan mode from settings (default to Basic)
-                string mode = db.GetSetting("AutomaticScanMode", "Basic");
-                if (mode.Equals("Full", System.StringComparison.OrdinalIgnoreCase))
+                long threatsDetected = 0;
+                if (mode.Equals("Full", StringComparison.OrdinalIgnoreCase))
                 {
                     var exclusions = db.GetExclusions();
-                    await orchestrator.RunFullScanAsync(exclusions, progress => { });
+                    await orchestrator.RunFullScanAsync(exclusions, progress =>
+                    {
+                        if (progress.IsCompleted)
+                        {
+                            threatsDetected = progress.ThreatsDetected;
+                        }
+                    });
                 }
                 else
                 {
-                    await orchestrator.RunBasicScanAsync(progress => { });
+                    await orchestrator.RunBasicScanAsync(progress =>
+                    {
+                        if (progress.IsCompleted)
+                        {
+                            threatsDetected = progress.ThreatsDetected;
+                        }
+                    });
                 }
+
+                string resultText = threatsDetected > 0
+                    ? $"Scheduled scan complete. WARNING: {threatsDetected} threat(s) detected!"
+                    : "Scheduled scan complete. No threats detected.";
+
+                trayManager.ShowNotification(
+                    "xScanner Scheduled Scan",
+                    resultText,
+                    threatsDetected > 0 ? System.Windows.Forms.ToolTipIcon.Warning : System.Windows.Forms.ToolTipIcon.Info
+                );
+
+                await System.Threading.Tasks.Task.Delay(2500);
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
-                System.IO.File.WriteAllText("xscanner_error.log", ex.ToString());
+                try
+                {
+                    System.IO.File.WriteAllText("xscanner_error.log", ex.ToString());
+                }
+                catch { }
             }
             finally
             {
-                Shutdown();
+                trayManager?.Dispose();
+                System.Windows.Application.Current.Shutdown();
+                Environment.Exit(0);
             }
         }
     }
