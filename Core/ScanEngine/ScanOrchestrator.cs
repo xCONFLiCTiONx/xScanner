@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using xScanner.Analysis;
 using xScanner.Core.FileSystem;
@@ -44,25 +45,27 @@ namespace xScanner.Core.ScanEngine
             _quarantineManager = new QuarantineManager(database);
         }
 
-        public async Task RunBasicScanAsync(Action<ScanProgressEventArgs> onProgress)
+        public async Task RunBasicScanAsync(Action<ScanProgressEventArgs> onProgress, CancellationToken cancellationToken = default)
         {
             onProgress?.Invoke(new ScanProgressEventArgs { CurrentFile = "Enumerating basic scan locations...", LogMessage = "[INFO] Starting basic scan file enumeration...", IsIndeterminate = true });
-            var files = await Task.Run(() => FileEnumerator.GetBasicScanFiles());
+            var files = await Task.Run(() => FileEnumerator.GetBasicScanFiles(cancellationToken), cancellationToken);
             var fileList = new List<string>(files);
+            if (cancellationToken.IsCancellationRequested) return;
             onProgress?.Invoke(new ScanProgressEventArgs { CurrentFile = $"Found {fileList.Count} files to scan.", LogMessage = $"[INFO] Basic scan enumeration complete. Found {fileList.Count} files.", IsIndeterminate = false, TotalFiles = fileList.Count });
-            await RunScanInternalAsync("Basic", fileList, onProgress);
+            await RunScanInternalAsync("Basic", fileList, onProgress, cancellationToken);
         }
 
-        public async Task RunFullScanAsync(List<string> exclusions, Action<ScanProgressEventArgs> onProgress)
+        public async Task RunFullScanAsync(List<string> exclusions, Action<ScanProgressEventArgs> onProgress, CancellationToken cancellationToken = default)
         {
             onProgress?.Invoke(new ScanProgressEventArgs { CurrentFile = "Enumerating all fixed drives...", LogMessage = "[INFO] Starting full scan file enumeration across fixed drives...", IsIndeterminate = true });
-            var files = await Task.Run(() => FileEnumerator.GetFullScanFiles(exclusions));
+            var files = await Task.Run(() => FileEnumerator.GetFullScanFiles(exclusions, cancellationToken), cancellationToken);
             var fileList = new List<string>(files);
+            if (cancellationToken.IsCancellationRequested) return;
             onProgress?.Invoke(new ScanProgressEventArgs { CurrentFile = $"Found {fileList.Count} files to scan.", LogMessage = $"[INFO] Full scan enumeration complete. Found {fileList.Count} files across fixed drives.", IsIndeterminate = false, TotalFiles = fileList.Count });
-            await RunScanInternalAsync("Full", fileList, onProgress);
+            await RunScanInternalAsync("Full", fileList, onProgress, cancellationToken);
         }
 
-        private async Task RunScanInternalAsync(string scanType, List<string> filePaths, Action<ScanProgressEventArgs>? onProgress)
+        private async Task RunScanInternalAsync(string scanType, List<string> filePaths, Action<ScanProgressEventArgs>? onProgress, CancellationToken cancellationToken = default)
         {
             var startTime = DateTime.Now;
             string defVersion = _clamManager.GetDefinitionVersion();
@@ -84,6 +87,36 @@ namespace xScanner.Core.ScanEngine
 
             foreach (var file in filePaths)
             {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    _database.InsertScanRecord(new ScanRecord
+                    {
+                        StartTime = startTime,
+                        EndTime = DateTime.Now,
+                        ScanType = scanType,
+                        FilesExamined = examined,
+                        FilesScanned = scanned,
+                        FilesSkipped = skipped,
+                        ThreatsDetected = threats,
+                        SuspiciousFiles = suspicious,
+                        DefinitionVersion = defVersion,
+                        Status = "Stopped"
+                    });
+
+                    onProgress?.Invoke(new ScanProgressEventArgs
+                    {
+                        FilesExamined = examined,
+                        FilesScanned = scanned,
+                        FilesSkipped = skipped,
+                        ThreatsDetected = threats,
+                        SuspiciousFiles = suspicious,
+                        IsCompleted = true,
+                        LogMessage = $"[INFO] {scanType} scan stopped cleanly."
+                    });
+
+                    return;
+                }
+
                 examined++;
                 bool isThreatOrSuspicious = false;
                 string logMsg = string.Empty;
@@ -113,7 +146,7 @@ namespace xScanner.Core.ScanEngine
                     }
 
                     // ClamAV scan
-                    var clamRes = await _clamManager.ScanFileAsync(file);
+                    var clamRes = await _clamManager.ScanFileAsync(file, cancellationToken);
 
                     string scanResult = "Clean";
                     if (clamRes.IsThreat)

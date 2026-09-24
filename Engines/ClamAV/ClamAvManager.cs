@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Net.Http;
 using System.Security.Cryptography;
+using System.Threading;
 using System.Threading.Tasks;
 using xScanner.Database;
 
@@ -19,6 +21,8 @@ namespace xScanner.Engines.ClamAV
     public class ClamAvManager
     {
         private readonly ScanDatabase _database;
+        private readonly object _processLock = new();
+        private readonly HashSet<Process> _activeProcesses = new();
 
         // Centralized ClamAV 1.5.4 configuration
         public const string ClamVersion = "1.5.4";
@@ -28,6 +32,41 @@ namespace xScanner.Engines.ClamAV
         public ClamAvManager(ScanDatabase database)
         {
             _database = database;
+        }
+
+        private void RegisterProcess(Process process)
+        {
+            lock (_processLock)
+            {
+                _activeProcesses.Add(process);
+            }
+        }
+
+        private void UnregisterProcess(Process process)
+        {
+            lock (_processLock)
+            {
+                _activeProcesses.Remove(process);
+            }
+        }
+
+        public void KillActiveProcesses()
+        {
+            lock (_processLock)
+            {
+                foreach (var p in _activeProcesses)
+                {
+                    try
+                    {
+                        if (!p.HasExited)
+                        {
+                            p.Kill(true);
+                        }
+                    }
+                    catch { }
+                }
+                _activeProcesses.Clear();
+            }
         }
 
         public string GetEngineDirectory()
@@ -66,7 +105,7 @@ namespace xScanner.Engines.ClamAV
             return File.Exists(GetClamScanPath()) && File.Exists(GetFreshClamPath());
         }
 
-        public async Task<bool> DownloadAndInstallAsync(IProgress<string> statusProgress, IProgress<double> percentProgress)
+        public async Task<bool> DownloadAndInstallAsync(IProgress<string> statusProgress, IProgress<double> percentProgress, CancellationToken cancellationToken = default)
         {
             string engineDir = GetEngineDirectory();
             Directory.CreateDirectory(engineDir);
@@ -82,24 +121,26 @@ namespace xScanner.Engines.ClamAV
                 using (var httpClient = new HttpClient())
                 {
                     httpClient.Timeout = TimeSpan.FromMinutes(10);
-                    using var response = await httpClient.GetAsync(ClamDownloadUrl, HttpCompletionOption.ResponseHeadersRead);
+                    using var response = await httpClient.GetAsync(ClamDownloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
                     response.EnsureSuccessStatusCode();
 
                     var totalBytes = response.Content.Headers.ContentLength ?? 200 * 1024 * 1024;
-                    using var contentStream = await response.Content.ReadAsStreamAsync();
+                    using var contentStream = await response.Content.ReadAsStreamAsync(cancellationToken);
                     using var fileStream = new FileStream(tempZip, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true);
 
                     var buffer = new byte[8192];
                     long totalRead = 0;
                     int read;
-                    while ((read = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                    while ((read = await contentStream.ReadAsync(buffer, 0, buffer.Length, cancellationToken)) > 0)
                     {
-                        await fileStream.WriteAsync(buffer, 0, read);
+                        await fileStream.WriteAsync(buffer, 0, read, cancellationToken);
                         totalRead += read;
                         double pct = 10 + (double)totalRead / totalBytes * 40;
                         percentProgress?.Report(Math.Min(pct, 50));
                     }
                 }
+
+                if (cancellationToken.IsCancellationRequested) return false;
 
                 statusProgress?.Report("Verifying package integrity (SHA-256)...");
                 percentProgress?.Report(55);
@@ -108,7 +149,7 @@ namespace xScanner.Engines.ClamAV
                 using (var sha256 = SHA256.Create())
                 {
                     using var fs = File.OpenRead(tempZip);
-                    byte[] hashBytes = await sha256.ComputeHashAsync(fs);
+                    byte[] hashBytes = await sha256.ComputeHashAsync(fs, cancellationToken);
                     actualHash = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
                 }
 
@@ -144,6 +185,7 @@ namespace xScanner.Engines.ClamAV
                 // Copy all files from sourceDir to engineDir
                 foreach (var file in Directory.GetFiles(sourceDir, "*.*", SearchOption.AllDirectories))
                 {
+                    if (cancellationToken.IsCancellationRequested) return false;
                     string relPath = Path.GetRelativePath(sourceDir, file);
                     string destFile = Path.Combine(engineDir, relPath);
                     string? destDir = Path.GetDirectoryName(destFile);
@@ -160,7 +202,7 @@ namespace xScanner.Engines.ClamAV
 
                 string confPath = Path.Combine(engineDir, "freshclam.conf");
                 string confContent = $"DatabaseDirectory {dbDir}\nUpdateLogFile {Path.Combine(engineDir, "freshclam.log")}\n";
-                await File.WriteAllTextAsync(confPath, confContent);
+                await File.WriteAllTextAsync(confPath, confContent, cancellationToken);
 
                 statusProgress?.Report("Downloading malware definitions via FreshClam...");
                 percentProgress?.Report(90);
@@ -181,7 +223,14 @@ namespace xScanner.Engines.ClamAV
                     using var process = Process.Start(psi);
                     if (process != null)
                     {
-                        await process.WaitForExitAsync();
+                        RegisterProcess(process);
+                        try
+                        {
+                            using var reg = cancellationToken.Register(() => { try { if (!process.HasExited) process.Kill(true); } catch { } });
+                            await process.WaitForExitAsync(cancellationToken);
+                        }
+                        catch (OperationCanceledException) { }
+                        finally { UnregisterProcess(process); }
                     }
                 }
 
@@ -208,7 +257,7 @@ namespace xScanner.Engines.ClamAV
             }
         }
 
-        public async Task<bool> UpdateDefinitionsAsync()
+        public async Task<bool> UpdateDefinitionsAsync(CancellationToken cancellationToken = default)
         {
             string freshclam = GetFreshClamPath();
             string engineDir = GetEngineDirectory();
@@ -230,9 +279,18 @@ namespace xScanner.Engines.ClamAV
                 using var process = Process.Start(psi);
                 if (process == null) return false;
 
-                await process.WaitForExitAsync();
-                _database.SetSetting("LastDefinitionUpdate", DateTime.Now.ToString("g"));
-                return process.ExitCode == 0;
+                RegisterProcess(process);
+                try
+                {
+                    using var reg = cancellationToken.Register(() => { try { if (!process.HasExited) process.Kill(true); } catch { } });
+                    await process.WaitForExitAsync(cancellationToken);
+                    _database.SetSetting("LastDefinitionUpdate", DateTime.Now.ToString("g"));
+                    return process.ExitCode == 0;
+                }
+                finally
+                {
+                    UnregisterProcess(process);
+                }
             }
             catch
             {
@@ -241,7 +299,7 @@ namespace xScanner.Engines.ClamAV
             }
         }
 
-        public async Task<ScanResultInfo> ScanFileAsync(string filePath)
+        public async Task<ScanResultInfo> ScanFileAsync(string filePath, CancellationToken cancellationToken = default)
         {
             string clamscan = GetClamScanPath();
             try
@@ -254,6 +312,11 @@ namespace xScanner.Engines.ClamAV
                 if (!File.Exists(clamscan))
                 {
                     return new ScanResultInfo { IsThreat = false, ErrorMessage = "ClamAV not installed" };
+                }
+
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    return new ScanResultInfo { IsThreat = false, ErrorMessage = "Cancelled" };
                 }
 
                 var psi = new ProcessStartInfo
@@ -272,25 +335,38 @@ namespace xScanner.Engines.ClamAV
                     return new ScanResultInfo { IsThreat = false, ErrorMessage = "Failed to start clamscan" };
                 }
 
-                string output = await process.StandardOutput.ReadToEndAsync();
-                await process.WaitForExitAsync();
-
-                if (process.ExitCode == 1)
+                RegisterProcess(process);
+                try
                 {
-                    string threatName = "Generic.Malware";
-                    int foundIndex = output.IndexOf("FOUND", StringComparison.OrdinalIgnoreCase);
-                    if (foundIndex > 0)
-                    {
-                        var parts = output.Substring(0, foundIndex).Trim().Split(':');
-                        if (parts.Length > 1)
-                        {
-                            threatName = parts[^1].Trim();
-                        }
-                    }
-                    return new ScanResultInfo { IsThreat = true, ThreatName = threatName };
-                }
+                    using var reg = cancellationToken.Register(() => { try { if (!process.HasExited) process.Kill(true); } catch { } });
+                    string output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
+                    await process.WaitForExitAsync(cancellationToken);
 
-                return new ScanResultInfo { IsThreat = false };
+                    if (process.ExitCode == 1)
+                    {
+                        string threatName = "Generic.Malware";
+                        int foundIndex = output.IndexOf("FOUND", StringComparison.OrdinalIgnoreCase);
+                        if (foundIndex > 0)
+                        {
+                            var parts = output.Substring(0, foundIndex).Trim().Split(':');
+                            if (parts.Length > 1)
+                            {
+                                threatName = parts[^1].Trim();
+                            }
+                        }
+                        return new ScanResultInfo { IsThreat = true, ThreatName = threatName };
+                    }
+
+                    return new ScanResultInfo { IsThreat = false };
+                }
+                catch (OperationCanceledException)
+                {
+                    return new ScanResultInfo { IsThreat = false, ErrorMessage = "Scan cancelled" };
+                }
+                finally
+                {
+                    UnregisterProcess(process);
+                }
             }
             catch (Exception ex)
             {

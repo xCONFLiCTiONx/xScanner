@@ -1,4 +1,7 @@
 using System;
+using System.ComponentModel;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using xScanner.Core.ScanEngine;
 using xScanner.Database;
@@ -12,6 +15,10 @@ namespace xScanner.UI
         private readonly ClamAvManager _clamManager;
         private readonly ScanOrchestrator _orchestrator;
         private bool _isScanning = false;
+        private CancellationTokenSource? _scanCts;
+        private Task? _activeScanTask;
+        private bool _isShutdownInProgress = false;
+        private bool _isShutdownCompleted = false;
 
         public MainWindow()
         {
@@ -46,8 +53,11 @@ namespace xScanner.UI
 
         private async void BtnBasicScan_Click(object sender, RoutedEventArgs e)
         {
-            if (_isScanning) return;
+            if (_isScanning || _isShutdownInProgress) return;
             _isScanning = true;
+            _scanCts = new CancellationTokenSource();
+            var token = _scanCts.Token;
+
             SetScanButtonsEnabled(false);
             TxtStatus.Text = "SCANNING";
             TxtStatus.Foreground = System.Windows.Media.Brushes.DarkOrange;
@@ -56,64 +66,88 @@ namespace xScanner.UI
 
             LogTerminal("[INFO] Starting Basic Scan...");
 
-            try
+            _activeScanTask = Task.Run(async () =>
             {
-                LogTerminal("[INFO] Updating ClamAV definitions...");
-                await _clamManager.UpdateDefinitionsAsync();
-                LogTerminal("[INFO] Definitions update check finished.");
-
-                await _orchestrator.RunBasicScanAsync(progress =>
+                try
                 {
-                    Dispatcher.BeginInvoke(new Action(() =>
+                    LogTerminal("[INFO] Updating ClamAV definitions...");
+                    await _clamManager.UpdateDefinitionsAsync(token);
+                    if (token.IsCancellationRequested) return;
+                    LogTerminal("[INFO] Definitions update check finished.");
+
+                    await _orchestrator.RunBasicScanAsync(progress =>
                     {
-                        if (!string.IsNullOrEmpty(progress.LogMessage))
+                        _ = Dispatcher.BeginInvoke(new Action(() =>
                         {
-                            LogTerminal(progress.LogMessage);
-                        }
-                        TxtProgress.Text = progress.CurrentFile;
-                        TxtFilesScanned.Text = $"Files Scanned: {progress.FilesScanned}";
-                        TxtThreatsFound.Text = $"Threats Found: {progress.ThreatsDetected}";
+                            if (_isShutdownInProgress) return;
 
-                        ScanProgressBar.IsIndeterminate = progress.IsIndeterminate;
-                        if (!progress.IsIndeterminate && progress.TotalFiles > 0)
-                        {
-                            ScanProgressBar.Maximum = progress.TotalFiles;
-                            ScanProgressBar.Value = progress.FilesExamined;
-                        }
+                            if (!string.IsNullOrEmpty(progress.LogMessage))
+                            {
+                                LogTerminal(progress.LogMessage);
+                            }
+                            TxtProgress.Text = progress.CurrentFile;
+                            TxtFilesScanned.Text = $"Files Scanned: {progress.FilesScanned}";
+                            TxtThreatsFound.Text = $"Threats Found: {progress.ThreatsDetected}";
 
-                        if (progress.IsCompleted)
+                            ScanProgressBar.IsIndeterminate = progress.IsIndeterminate;
+                            if (!progress.IsIndeterminate && progress.TotalFiles > 0)
+                            {
+                                ScanProgressBar.Maximum = progress.TotalFiles;
+                                ScanProgressBar.Value = progress.FilesExamined;
+                            }
+
+                            if (progress.IsCompleted)
+                            {
+                                ScanProgressBar.Value = ScanProgressBar.Maximum > 0 ? ScanProgressBar.Maximum : 100;
+                                ScanProgressBar.IsIndeterminate = false;
+                                TxtLastScan.Text = $"Last Scan: {DateTime.Now:g}";
+                                TxtStatus.Text = progress.ThreatsDetected > 0 ? "THREATS" : "CLEAN";
+                                TxtStatus.Foreground = progress.ThreatsDetected > 0 ? System.Windows.Media.Brushes.Red : System.Windows.Media.Brushes.Green;
+                                TxtProgress.Text = "Scan completed.";
+                                LogTerminal($"[INFO] Basic Scan completed. Examined: {progress.FilesExamined}, Scanned: {progress.FilesScanned}, Threats: {progress.ThreatsDetected}");
+                                System.Media.SystemSounds.Asterisk.Play();
+                            }
+                        }));
+                    }, token);
+                }
+                catch (OperationCanceledException)
+                {
+                    Dispatcher.Invoke(() => LogTerminal("[INFO] Basic Scan cancelled."));
+                }
+                catch (Exception ex)
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        MessageBox.Show($"Scan error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        TxtStatus.Text = "ERROR";
+                        LogTerminal($"[ERROR] Scan failed: {ex.Message}");
+                    });
+                }
+                finally
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        _isScanning = false;
+                        if (!_isShutdownInProgress)
                         {
-                            ScanProgressBar.Value = ScanProgressBar.Maximum > 0 ? ScanProgressBar.Maximum : 100;
+                            SetScanButtonsEnabled(true);
                             ScanProgressBar.IsIndeterminate = false;
-                            TxtLastScan.Text = $"Last Scan: {DateTime.Now:g}";
-                            TxtStatus.Text = progress.ThreatsDetected > 0 ? "THREATS" : "CLEAN";
-                            TxtStatus.Foreground = progress.ThreatsDetected > 0 ? System.Windows.Media.Brushes.Red : System.Windows.Media.Brushes.Green;
-                            TxtProgress.Text = "Scan completed.";
-                            LogTerminal($"[INFO] Basic Scan completed. Examined: {progress.FilesExamined}, Scanned: {progress.FilesScanned}, Threats: {progress.ThreatsDetected}");
-                            System.Media.SystemSounds.Asterisk.Play();
+                            LoadStatus();
                         }
-                    }));
-                });
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Scan error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                TxtStatus.Text = "ERROR";
-                LogTerminal($"[ERROR] Scan failed: {ex.Message}");
-            }
-            finally
-            {
-                _isScanning = false;
-                SetScanButtonsEnabled(true);
-                ScanProgressBar.IsIndeterminate = false;
-                LoadStatus();
-            }
+                    });
+                }
+            }, token);
+
+            await _activeScanTask;
         }
 
         private async void BtnFullScan_Click(object sender, RoutedEventArgs e)
         {
-            if (_isScanning) return;
+            if (_isScanning || _isShutdownInProgress) return;
             _isScanning = true;
+            _scanCts = new CancellationTokenSource();
+            var token = _scanCts.Token;
+
             SetScanButtonsEnabled(false);
             TxtStatus.Text = "SCANNING";
             TxtStatus.Foreground = System.Windows.Media.Brushes.DarkOrange;
@@ -122,64 +156,182 @@ namespace xScanner.UI
 
             LogTerminal("[INFO] Starting Full Scan across fixed drives...");
 
-            try
+            _activeScanTask = Task.Run(async () =>
             {
-                LogTerminal("[INFO] Updating ClamAV definitions...");
-                await _clamManager.UpdateDefinitionsAsync();
-                LogTerminal("[INFO] Definitions update check finished.");
-
-                var exclusions = _database.GetExclusions();
-                if (exclusions.Count > 0)
+                try
                 {
-                    LogTerminal($"[INFO] Loaded {exclusions.Count} exclusion path(s).");
-                }
+                    LogTerminal("[INFO] Updating ClamAV definitions...");
+                    await _clamManager.UpdateDefinitionsAsync(token);
+                    if (token.IsCancellationRequested) return;
+                    LogTerminal("[INFO] Definitions update check finished.");
 
-                await _orchestrator.RunFullScanAsync(exclusions, progress =>
+                    var exclusions = _database.GetExclusions();
+                    if (exclusions.Count > 0)
+                    {
+                        LogTerminal($"[INFO] Loaded {exclusions.Count} exclusion path(s).");
+                    }
+
+                    await _orchestrator.RunFullScanAsync(exclusions, progress =>
+                    {
+                        _ = Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            if (_isShutdownInProgress) return;
+
+                            if (!string.IsNullOrEmpty(progress.LogMessage))
+                            {
+                                LogTerminal(progress.LogMessage);
+                            }
+                            TxtProgress.Text = progress.CurrentFile;
+                            TxtFilesScanned.Text = $"Files Scanned: {progress.FilesScanned}";
+                            TxtThreatsFound.Text = $"Threats Found: {progress.ThreatsDetected}";
+
+                            ScanProgressBar.IsIndeterminate = progress.IsIndeterminate;
+                            if (!progress.IsIndeterminate && progress.TotalFiles > 0)
+                            {
+                                ScanProgressBar.Maximum = progress.TotalFiles;
+                                ScanProgressBar.Value = progress.FilesExamined;
+                            }
+
+                            if (progress.IsCompleted)
+                            {
+                                ScanProgressBar.Value = ScanProgressBar.Maximum > 0 ? ScanProgressBar.Maximum : 100;
+                                ScanProgressBar.IsIndeterminate = false;
+                                TxtLastScan.Text = $"Last Scan: {DateTime.Now:g}";
+                                TxtStatus.Text = progress.ThreatsDetected > 0 ? "THREATS" : "CLEAN";
+                                TxtStatus.Foreground = progress.ThreatsDetected > 0 ? System.Windows.Media.Brushes.Red : System.Windows.Media.Brushes.Green;
+                                TxtProgress.Text = "Full Scan completed.";
+                                LogTerminal($"[INFO] Full Scan completed. Examined: {progress.FilesExamined}, Scanned: {progress.FilesScanned}, Threats: {progress.ThreatsDetected}");
+                                System.Media.SystemSounds.Asterisk.Play();
+                            }
+                        }));
+                    }, token);
+                }
+                catch (OperationCanceledException)
+                {
+                    Dispatcher.Invoke(() => LogTerminal("[INFO] Full Scan cancelled."));
+                }
+                catch (Exception ex)
                 {
                     Dispatcher.Invoke(() =>
                     {
-                        if (!string.IsNullOrEmpty(progress.LogMessage))
+                        MessageBox.Show($"Scan error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                        TxtStatus.Text = "ERROR";
+                        LogTerminal($"[ERROR] Full scan failed: {ex.Message}");
+                    });
+                }
+                finally
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        _isScanning = false;
+                        if (!_isShutdownInProgress)
                         {
-                            LogTerminal(progress.LogMessage);
-                        }
-                        TxtProgress.Text = progress.CurrentFile;
-                        TxtFilesScanned.Text = $"Files Scanned: {progress.FilesScanned}";
-                        TxtThreatsFound.Text = $"Threats Found: {progress.ThreatsDetected}";
-
-                        ScanProgressBar.IsIndeterminate = progress.IsIndeterminate;
-                        if (!progress.IsIndeterminate && progress.TotalFiles > 0)
-                        {
-                            ScanProgressBar.Maximum = progress.TotalFiles;
-                            ScanProgressBar.Value = progress.FilesExamined;
-                        }
-
-                        if (progress.IsCompleted)
-                        {
-                            ScanProgressBar.Value = ScanProgressBar.Maximum > 0 ? ScanProgressBar.Maximum : 100;
+                            SetScanButtonsEnabled(true);
                             ScanProgressBar.IsIndeterminate = false;
-                            TxtLastScan.Text = $"Last Scan: {DateTime.Now:g}";
-                            TxtStatus.Text = progress.ThreatsDetected > 0 ? "THREATS" : "CLEAN";
-                            TxtStatus.Foreground = progress.ThreatsDetected > 0 ? System.Windows.Media.Brushes.Red : System.Windows.Media.Brushes.Green;
-                            TxtProgress.Text = "Full Scan completed.";
-                            LogTerminal($"[INFO] Full Scan completed. Examined: {progress.FilesExamined}, Scanned: {progress.FilesScanned}, Threats: {progress.ThreatsDetected}");
-                            System.Media.SystemSounds.Asterisk.Play();
+                            LoadStatus();
                         }
                     });
-                });
+                }
+            }, token);
+
+            await _activeScanTask;
+        }
+
+        protected override async void OnClosing(CancelEventArgs e)
+        {
+            if (_isShutdownCompleted)
+            {
+                base.OnClosing(e);
+                return;
+            }
+
+            e.Cancel = true;
+
+            if (_isShutdownInProgress)
+            {
+                return;
+            }
+
+            _isShutdownInProgress = true;
+            await PerformShutdownCleanupAsync();
+
+            _isShutdownCompleted = true;
+            Close();
+        }
+
+        private async Task PerformShutdownCleanupAsync()
+        {
+            SetScanButtonsEnabled(false);
+            TxtStatus.Text = "CLOSING";
+            TxtStatus.Foreground = System.Windows.Media.Brushes.DarkOrange;
+
+            ScanProgressBar.IsIndeterminate = false;
+            ScanProgressBar.Minimum = 0;
+            ScanProgressBar.Maximum = 100;
+            ScanProgressBar.Value = 0;
+
+            LogTerminal("[INFO] =========================================");
+            LogTerminal("[INFO] Standard window close requested (X button).");
+            LogTerminal("[INFO] Initiating graceful shutdown and cleanup...");
+
+            // Step 1: Signal cancellation to active scan tasks (0% -> 25%)
+            ScanProgressBar.Value = 10;
+            TxtProgress.Text = "Stopping active scan operations (10%)...";
+            if (_scanCts != null && !_scanCts.IsCancellationRequested)
+            {
+                LogTerminal("[INFO] Step 1/4: Cancelling active scan engine tasks...");
+                _scanCts.Cancel();
+            }
+            else
+            {
+                LogTerminal("[INFO] Step 1/4: No active scan tasks to cancel.");
+            }
+
+            if (_activeScanTask != null && !_activeScanTask.IsCompleted)
+            {
+                ScanProgressBar.Value = 20;
+                TxtProgress.Text = "Waiting for scan worker thread to stop cleanly (20%)...";
+                try
+                {
+                    await Task.WhenAny(_activeScanTask, Task.Delay(1500));
+                }
+                catch { }
+            }
+
+            ScanProgressBar.Value = 25;
+            await Task.Delay(100);
+
+            // Step 2: Terminate child processes (ClamAV) (25% -> 50%)
+            ScanProgressBar.Value = 40;
+            TxtProgress.Text = "Terminating background ClamAV engine processes (40%)...";
+            LogTerminal("[INFO] Step 2/4: Terminating any running child engine processes...");
+            _clamManager.KillActiveProcesses();
+            ScanProgressBar.Value = 50;
+            await Task.Delay(150);
+
+            // Step 3: Flush database and record application shutdown (50% -> 80%)
+            ScanProgressBar.Value = 65;
+            TxtProgress.Text = "Flushing scan history and saving final database state (65%)...";
+            LogTerminal("[INFO] Step 3/4: Writing final shutdown record to local database...");
+            try
+            {
+                _database.SetSetting("LastShutdownTime", DateTime.Now.ToString("o"));
+                _database.SetSetting("LastCleanStopStatus", "Successful");
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Scan error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                TxtStatus.Text = "ERROR";
-                LogTerminal($"[ERROR] Full scan failed: {ex.Message}");
+                LogTerminal($"[WARN] Could not write shutdown state: {ex.Message}");
             }
-            finally
-            {
-                _isScanning = false;
-                SetScanButtonsEnabled(true);
-                ScanProgressBar.IsIndeterminate = false;
-                LoadStatus();
-            }
+            ScanProgressBar.Value = 80;
+            await Task.Delay(150);
+
+            // Step 4: Finalizing shutdown (80% -> 100%)
+            ScanProgressBar.Value = 95;
+            TxtProgress.Text = "Cleanup complete. Finalizing shutdown (95%)...";
+            LogTerminal("[INFO] Step 4/4: Cleanup operations complete. Closing xScanner.");
+            ScanProgressBar.Value = 100;
+            TxtProgress.Text = "Closed cleanly.";
+            await Task.Delay(350);
         }
 
         private void SetScanButtonsEnabled(bool enabled)
