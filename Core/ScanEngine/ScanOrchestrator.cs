@@ -43,15 +43,19 @@ namespace xScanner.Core.ScanEngine
 
         public async Task RunBasicScanAsync(Action<ScanProgressEventArgs> onProgress)
         {
-            await RunScanInternalAsync("Basic", FileEnumerator.GetBasicScanFiles(), onProgress);
+            onProgress?.Invoke(new ScanProgressEventArgs { CurrentFile = "Enumerating basic scan locations..." });
+            var files = await Task.Run(() => FileEnumerator.GetBasicScanFiles());
+            await RunScanInternalAsync("Basic", files, onProgress);
         }
 
         public async Task RunFullScanAsync(List<string> exclusions, Action<ScanProgressEventArgs> onProgress)
         {
-            await RunScanInternalAsync("Full", FileEnumerator.GetFullScanFiles(exclusions), onProgress);
+            onProgress?.Invoke(new ScanProgressEventArgs { CurrentFile = "Enumerating all fixed drives..." });
+            var files = await Task.Run(() => FileEnumerator.GetFullScanFiles(exclusions));
+            await RunScanInternalAsync("Full", files, onProgress);
         }
 
-        private async Task RunScanInternalAsync(string scanType, IEnumerable<string> filePaths, Action<ScanProgressEventArgs> onProgress)
+        private async Task RunScanInternalAsync(string scanType, IEnumerable<string> filePaths, Action<ScanProgressEventArgs>? onProgress)
         {
             var startTime = DateTime.Now;
             string defVersion = _clamManager.GetDefinitionVersion();
@@ -65,15 +69,7 @@ namespace xScanner.Core.ScanEngine
             foreach (var file in filePaths)
             {
                 examined++;
-                onProgress?.Invoke(new ScanProgressEventArgs
-                {
-                    CurrentFile = file,
-                    FilesExamined = examined,
-                    FilesScanned = scanned,
-                    FilesSkipped = skipped,
-                    ThreatsDetected = threats,
-                    SuspiciousFiles = suspicious
-                });
+                bool isThreatOrSuspicious = false;
 
                 if (_cacheManager.ShouldScanFile(file, defVersion, out var existingRecord))
                 {
@@ -106,6 +102,7 @@ namespace xScanner.Core.ScanEngine
                     if (clamRes.IsThreat)
                     {
                         threats++;
+                        isThreatOrSuspicious = true;
                         scanResult = "Threat";
                         _database.InsertDetection(new DetectionRecord
                         {
@@ -124,6 +121,7 @@ namespace xScanner.Core.ScanEngine
                     else if (isPeSuspicious)
                     {
                         scanResult = "Suspicious";
+                        isThreatOrSuspicious = true;
                         _database.InsertDetection(new DetectionRecord
                         {
                             FilePath = file,
@@ -148,6 +146,20 @@ namespace xScanner.Core.ScanEngine
                 else
                 {
                     skipped++;
+                }
+
+                // Throttle progress updates to every 50 files, or when threat/suspicious found, or first file
+                if (examined == 1 || examined % 50 == 0 || isThreatOrSuspicious)
+                {
+                    onProgress?.Invoke(new ScanProgressEventArgs
+                    {
+                        CurrentFile = file,
+                        FilesExamined = examined,
+                        FilesScanned = scanned,
+                        FilesSkipped = skipped,
+                        ThreatsDetected = threats,
+                        SuspiciousFiles = suspicious
+                    });
                 }
             }
 

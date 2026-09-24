@@ -43,7 +43,7 @@ namespace xScanner.UI
                 await _clamManager.UpdateDefinitionsAsync();
                 await _orchestrator.RunBasicScanAsync(progress =>
                 {
-                    Dispatcher.Invoke(() =>
+                    Dispatcher.BeginInvoke(new Action(() =>
                     {
                         TxtProgress.Text = progress.CurrentFile;
                         TxtFilesScanned.Text = $"Files Scanned: {progress.FilesScanned}";
@@ -56,7 +56,7 @@ namespace xScanner.UI
                             TxtProgress.Text = "Scan completed.";
                             System.Media.SystemSounds.Asterisk.Play();
                         }
-                    });
+                    }));
                 });
             }
             catch (Exception ex)
