@@ -17,9 +17,21 @@
         <DockPanel Grid.Row="0" Background="{DynamicResource ThemeHeaderBackground}" LastChildFill="False">
             <TextBlock Text="xScanner" FontSize="20" FontWeight="Bold" VerticalAlignment="Center" Margin="15,0,0,0" Foreground="{DynamicResource ThemeTextColor}"/>
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" Margin="0,0,10,0">
-                <Button Content="🛡 Quarantine" Click="BtnQuarantine_Click" Margin="5" Padding="8,4"/>
-                <Button Content="📜 History" Click="BtnHistory_Click" Margin="5" Padding="8,4"/>
-                <Button Content="⚙" Click="BtnSettings_Click" FontSize="18" Width="38" Height="32" Margin="5" HorizontalContentAlignment="Center" VerticalContentAlignment="Center"/>
+                <Button Click="BtnQuarantine_Click" Margin="5" Padding="8,4">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xEA18;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock Text="Quarantine" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Click="BtnHistory_Click" Margin="5" Padding="8,4">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE81C;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock Text="History" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Click="BtnSettings_Click" Width="38" Height="32" Margin="5" ToolTip="Settings">
+                    <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Button>
             </StackPanel>
         </DockPanel>
 
@@ -64,7 +76,10 @@
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
                 <DockPanel Grid.Row="0" LastChildFill="False">
-                    <TextBlock Text="🖥 Activity Terminal" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource ThemeTextColor}" VerticalAlignment="Center" Margin="4,0,0,4"/>
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0,0,4">
+                        <TextBlock Text="&#xE756;" FontFamily="Segoe MDL2 Assets" FontSize="13" VerticalAlignment="Center" Margin="0,0,6,0" Foreground="{DynamicResource ThemeTextColor}"/>
+                        <TextBlock Text="Activity Terminal" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource ThemeTextColor}" VerticalAlignment="Center"/>
+                    </StackPanel>
                     <Button Content="Clear" Click="BtnClearTerminal_Click" DockPanel.Dock="Right" FontSize="10" Padding="6,1" Margin="0,0,4,4"/>
                 </DockPanel>
                 <TextBox x:Name="TxtTerminal" Grid.Row="1" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
