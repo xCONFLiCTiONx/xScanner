@@ -8,6 +8,72 @@ namespace xScanner.Core.FileSystem
 {
     public static class FileEnumerator
     {
+        // Windows Cloud Files recall attribute constants
+        private const uint FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS = 0x00400000;
+        private const uint FILE_ATTRIBUTE_RECALL_ON_OPEN        = 0x00040000;
+
+        /// <summary>
+        /// Checks if a file is a virtual/cloud placeholder or stored offline,
+        /// which would trigger a network/device recall (and hang if offline/phone disconnected).
+        /// </summary>
+        public static bool IsVirtualOrOffline(string path)
+        {
+            try
+            {
+                var attr = File.GetAttributes(path);
+                uint raw = (uint)attr;
+
+                // Offline storage or cloud recall attributes
+                if ((attr & FileAttributes.Offline) != 0) return true;
+                if ((raw & FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS) != 0 ||
+                    (raw & FILE_ATTRIBUTE_RECALL_ON_OPEN) != 0)
+                {
+                    return true;
+                }
+
+                return false;
+            }
+            catch
+            {
+                // If getting attributes fails or times out, safely treat as inaccessible/virtual
+                return true;
+            }
+        }
+
+        /// <summary>
+        /// Checks if a directory is a reparse point, junction, symlink, or cloud device mount (like C:\Users\<user>\CrossDevice).
+        /// Traversing into these directories causes Windows to attempt network/Bluetooth device connection.
+        /// </summary>
+        public static bool IsReparsePointOrMount(string dirPath)
+        {
+            try
+            {
+                var attr = File.GetAttributes(dirPath);
+                uint raw = (uint)attr;
+
+                if ((attr & FileAttributes.ReparsePoint) != 0) return true;
+                if ((attr & FileAttributes.Offline) != 0) return true;
+                if ((raw & FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS) != 0 ||
+                    (raw & FILE_ATTRIBUTE_RECALL_ON_OPEN) != 0)
+                {
+                    return true;
+                }
+
+                return false;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
+        private static bool IsDriveRoot(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return false;
+            string trimmed = path.TrimEnd('\\', '/');
+            return trimmed.Length == 2 && trimmed[1] == ':';
+        }
+
         public static IEnumerable<string> GetBasicScanFiles(List<string>? exclusions = null, CancellationToken cancellationToken = default)
         {
             var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -16,20 +82,24 @@ namespace xScanner.Core.FileSystem
             try
             {
                 string startupUser = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
-                if (Directory.Exists(startupUser))
+                if (Directory.Exists(startupUser) && !IsReparsePointOrMount(startupUser))
+                {
                     foreach (var f in Directory.GetFiles(startupUser, "*.*", SearchOption.AllDirectories))
                     {
                         if (cancellationToken.IsCancellationRequested) return files;
-                        if (!IsExcluded(f, exclusions)) files.Add(f);
+                        if (!IsExcluded(f, exclusions) && !IsVirtualOrOffline(f)) files.Add(f);
                     }
+                }
 
                 string startupCommon = Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup);
-                if (Directory.Exists(startupCommon))
+                if (Directory.Exists(startupCommon) && !IsReparsePointOrMount(startupCommon))
+                {
                     foreach (var f in Directory.GetFiles(startupCommon, "*.*", SearchOption.AllDirectories))
                     {
                         if (cancellationToken.IsCancellationRequested) return files;
-                        if (!IsExcluded(f, exclusions)) files.Add(f);
+                        if (!IsExcluded(f, exclusions) && !IsVirtualOrOffline(f)) files.Add(f);
                     }
+                }
             }
             catch { }
 
@@ -81,10 +151,16 @@ namespace xScanner.Core.FileSystem
             {
                 if (cancellationToken.IsCancellationRequested) return;
 
+                if (IsExcluded(dir, exclusions)) return;
+
+                // Never traverse into reparse points, junctions, or cloud/device mounts (e.g. CrossDevice)
+                if (!IsDriveRoot(dir) && IsReparsePointOrMount(dir)) return;
+
                 foreach (var file in Directory.GetFiles(dir))
                 {
                     if (cancellationToken.IsCancellationRequested) return;
                     if (IsExcluded(file, exclusions)) continue;
+                    if (IsVirtualOrOffline(file)) continue;
                     files.Add(file);
                 }
 
@@ -92,6 +168,7 @@ namespace xScanner.Core.FileSystem
                 {
                     if (cancellationToken.IsCancellationRequested) return;
                     if (IsExcluded(subDir, exclusions)) continue;
+                    if (IsReparsePointOrMount(subDir)) continue;
                     EnumerateDirectoryRecursive(subDir, exclusions, files, cancellationToken);
                 }
             }
@@ -118,24 +195,24 @@ namespace xScanner.Core.FileSystem
                 if (cancellationToken.IsCancellationRequested) return;
 
                 string target = string.IsNullOrEmpty(subFolder) ? basePath : Path.Combine(basePath, subFolder);
-                if (Directory.Exists(target))
+                if (Directory.Exists(target) && !IsReparsePointOrMount(target))
                 {
                     foreach (var f in Directory.GetFiles(target, "*.*", SearchOption.TopDirectoryOnly))
                     {
                         if (cancellationToken.IsCancellationRequested) return;
-                        if (!IsExcluded(f, exclusions)) files.Add(f);
+                        if (!IsExcluded(f, exclusions) && !IsVirtualOrOffline(f)) files.Add(f);
                     }
                     // Also check 1 level subfolders for temp/appdata
                     foreach (var d in Directory.GetDirectories(target))
                     {
                         if (cancellationToken.IsCancellationRequested) return;
-                        if (IsExcluded(d, exclusions)) continue;
+                        if (IsExcluded(d, exclusions) || IsReparsePointOrMount(d)) continue;
                         try
                         {
                             foreach (var f in Directory.GetFiles(d, "*.*", SearchOption.TopDirectoryOnly))
                             {
                                 if (cancellationToken.IsCancellationRequested) return;
-                                if (!IsExcluded(f, exclusions)) files.Add(f);
+                                if (!IsExcluded(f, exclusions) && !IsVirtualOrOffline(f)) files.Add(f);
                             }
                         }
                         catch { }
@@ -157,7 +234,7 @@ namespace xScanner.Core.FileSystem
                         string valData = key.GetValue(valName)?.ToString() ?? string.Empty;
                         // Extract file path from command line (e.g. "C:\path\app.exe" /arg -> C:\path\app.exe)
                         string cleanedPath = CleanFilePathFromCommand(valData);
-                        if (!string.IsNullOrEmpty(cleanedPath) && File.Exists(cleanedPath) && !IsExcluded(cleanedPath, exclusions))
+                        if (!string.IsNullOrEmpty(cleanedPath) && File.Exists(cleanedPath) && !IsExcluded(cleanedPath, exclusions) && !IsVirtualOrOffline(cleanedPath))
                         {
                             files.Add(cleanedPath);
                         }

@@ -129,6 +129,12 @@ namespace xScanner.Core.ScanEngine
 
                 if (_cacheManager.ShouldScanFile(file, defVersion, out var existingRecord))
                 {
+                    if (FileEnumerator.IsVirtualOrOffline(file))
+                    {
+                        skipped++;
+                        continue;
+                    }
+
                     scanned++;
                     string sha256 = string.Empty;
                     try
