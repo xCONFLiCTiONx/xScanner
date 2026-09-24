@@ -22,6 +22,9 @@ namespace xScanner.Core.ScanEngine
         public long ThreatsDetected { get; set; }
         public long SuspiciousFiles { get; set; }
         public bool IsCompleted { get; set; }
+        public string LogMessage { get; set; } = string.Empty;
+        public bool IsIndeterminate { get; set; } = true;
+        public long TotalFiles { get; set; }
     }
 
     public class ScanOrchestrator
@@ -43,19 +46,23 @@ namespace xScanner.Core.ScanEngine
 
         public async Task RunBasicScanAsync(Action<ScanProgressEventArgs> onProgress)
         {
-            onProgress?.Invoke(new ScanProgressEventArgs { CurrentFile = "Enumerating basic scan locations..." });
+            onProgress?.Invoke(new ScanProgressEventArgs { CurrentFile = "Enumerating basic scan locations...", LogMessage = "[INFO] Starting basic scan file enumeration...", IsIndeterminate = true });
             var files = await Task.Run(() => FileEnumerator.GetBasicScanFiles());
-            await RunScanInternalAsync("Basic", files, onProgress);
+            var fileList = new List<string>(files);
+            onProgress?.Invoke(new ScanProgressEventArgs { CurrentFile = $"Found {fileList.Count} files to scan.", LogMessage = $"[INFO] Basic scan enumeration complete. Found {fileList.Count} files.", IsIndeterminate = false, TotalFiles = fileList.Count });
+            await RunScanInternalAsync("Basic", fileList, onProgress);
         }
 
         public async Task RunFullScanAsync(List<string> exclusions, Action<ScanProgressEventArgs> onProgress)
         {
-            onProgress?.Invoke(new ScanProgressEventArgs { CurrentFile = "Enumerating all fixed drives..." });
+            onProgress?.Invoke(new ScanProgressEventArgs { CurrentFile = "Enumerating all fixed drives...", LogMessage = "[INFO] Starting full scan file enumeration across fixed drives...", IsIndeterminate = true });
             var files = await Task.Run(() => FileEnumerator.GetFullScanFiles(exclusions));
-            await RunScanInternalAsync("Full", files, onProgress);
+            var fileList = new List<string>(files);
+            onProgress?.Invoke(new ScanProgressEventArgs { CurrentFile = $"Found {fileList.Count} files to scan.", LogMessage = $"[INFO] Full scan enumeration complete. Found {fileList.Count} files across fixed drives.", IsIndeterminate = false, TotalFiles = fileList.Count });
+            await RunScanInternalAsync("Full", fileList, onProgress);
         }
 
-        private async Task RunScanInternalAsync(string scanType, IEnumerable<string> filePaths, Action<ScanProgressEventArgs>? onProgress)
+        private async Task RunScanInternalAsync(string scanType, List<string> filePaths, Action<ScanProgressEventArgs>? onProgress)
         {
             var startTime = DateTime.Now;
             string defVersion = _clamManager.GetDefinitionVersion();
@@ -65,11 +72,21 @@ namespace xScanner.Core.ScanEngine
             long skipped = 0;
             long threats = 0;
             long suspicious = 0;
+            long totalCount = filePaths.Count;
+
+            onProgress?.Invoke(new ScanProgressEventArgs
+            {
+                CurrentFile = $"Starting {scanType} scan...",
+                LogMessage = $"[INFO] Beginning scan of {totalCount} files using ClamAV definitions v{defVersion}...",
+                IsIndeterminate = false,
+                TotalFiles = totalCount
+            });
 
             foreach (var file in filePaths)
             {
                 examined++;
                 bool isThreatOrSuspicious = false;
+                string logMsg = string.Empty;
 
                 if (_cacheManager.ShouldScanFile(file, defVersion, out var existingRecord))
                 {
@@ -104,6 +121,7 @@ namespace xScanner.Core.ScanEngine
                         threats++;
                         isThreatOrSuspicious = true;
                         scanResult = "Threat";
+                        logMsg = $"[THREAT] Threat detected: {clamRes.ThreatName} in {file}";
                         _database.InsertDetection(new DetectionRecord
                         {
                             FilePath = file,
@@ -122,6 +140,7 @@ namespace xScanner.Core.ScanEngine
                     {
                         scanResult = "Suspicious";
                         isThreatOrSuspicious = true;
+                        logMsg = $"[SUSPICIOUS] Suspicious PE pattern detected in {file}";
                         _database.InsertDetection(new DetectionRecord
                         {
                             FilePath = file,
@@ -149,7 +168,7 @@ namespace xScanner.Core.ScanEngine
                 }
 
                 // Throttle progress updates to every 50 files, or when threat/suspicious found, or first file
-                if (examined == 1 || examined % 50 == 0 || isThreatOrSuspicious)
+                if (examined == 1 || examined % 50 == 0 || isThreatOrSuspicious || examined == totalCount)
                 {
                     onProgress?.Invoke(new ScanProgressEventArgs
                     {
@@ -158,7 +177,10 @@ namespace xScanner.Core.ScanEngine
                         FilesScanned = scanned,
                         FilesSkipped = skipped,
                         ThreatsDetected = threats,
-                        SuspiciousFiles = suspicious
+                        SuspiciousFiles = suspicious,
+                        LogMessage = logMsg,
+                        IsIndeterminate = false,
+                        TotalFiles = totalCount
                     });
                 }
             }

@@ -1,15 +1,16 @@
 <Window x:Class="xScanner.UI.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="xScanner" Height="500" Width="450"
-        ResizeMode="CanMinimize"
+        Title="xScanner" Height="620" Width="520"
+        ResizeMode="CanResize"
         WindowStartupLocation="CenterScreen"
         Background="{DynamicResource ThemeWindowBackground}">
-    <Grid>
+    <Grid Margin="0">
         <Grid.RowDefinitions>
             <RowDefinition Height="50"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="45"/>
+            <RowDefinition Height="35"/>
         </Grid.RowDefinitions>
 
         <!-- Top Header -->
@@ -23,31 +24,60 @@
         </DockPanel>
 
         <!-- Main PC Status Area -->
-        <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center">
-            <Border Background="{DynamicResource ThemeCardBackground}" BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1" Width="380" Height="240" CornerRadius="12" Padding="20">
+        <StackPanel Grid.Row="1" HorizontalAlignment="Center" Margin="0,10,0,10">
+            <Border Background="{DynamicResource ThemeCardBackground}" BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1" Width="480" CornerRadius="12" Padding="15">
                 <Border.Effect>
                     <DropShadowEffect BlurRadius="10" ShadowDepth="2" Opacity="0.1"/>
                 </Border.Effect>
                 <StackPanel HorizontalAlignment="Center">
-                    <TextBlock Text="PC STATUS" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource ThemeMutedTextColor}" HorizontalAlignment="Center"/>
-                    <TextBlock x:Name="TxtStatus" Text="CLEAN" FontSize="36" FontWeight="Bold" Foreground="#28A745" HorizontalAlignment="Center" Margin="0,5,0,15"/>
+                    <TextBlock Text="PC STATUS" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource ThemeMutedTextColor}" HorizontalAlignment="Center"/>
+                    <TextBlock x:Name="TxtStatus" Text="CLEAN" FontSize="32" FontWeight="Bold" Foreground="#28A745" HorizontalAlignment="Center" Margin="0,2,0,10"/>
 
-                    <TextBlock x:Name="TxtLastScan" Text="Last Scan: Never" FontSize="13" Foreground="{DynamicResource ThemeSubTextColor}" HorizontalAlignment="Center" Margin="0,2"/>
-                    <TextBlock x:Name="TxtFilesScanned" Text="Files Scanned: 0" FontSize="13" Foreground="{DynamicResource ThemeSubTextColor}" HorizontalAlignment="Center" Margin="0,2"/>
-                    <TextBlock x:Name="TxtThreatsFound" Text="Threats Found: 0" FontSize="13" Foreground="{DynamicResource ThemeSubTextColor}" HorizontalAlignment="Center" Margin="0,2,0,15"/>
+                    <Grid Width="440" Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="TxtLastScan" Text="Last Scan: Never" FontSize="12" Foreground="{DynamicResource ThemeSubTextColor}" HorizontalAlignment="Left" Grid.Column="0"/>
+                        <TextBlock x:Name="TxtFilesScanned" Text="Files Scanned: 0" FontSize="12" Foreground="{DynamicResource ThemeSubTextColor}" HorizontalAlignment="Center" Grid.Column="1"/>
+                        <TextBlock x:Name="TxtThreatsFound" Text="Threats Found: 0" FontSize="12" Foreground="{DynamicResource ThemeSubTextColor}" HorizontalAlignment="Right" Grid.Column="2"/>
+                    </Grid>
 
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                        <Button x:Name="BtnBasicScan" Content="BASIC SCAN" Click="BtnBasicScan_Click" Width="120" Height="38" Margin="5" Background="#007ACC" Foreground="White" FontWeight="Bold" BorderThickness="0"/>
-                        <Button x:Name="BtnFullScan" Content="FULL SCAN" Click="BtnFullScan_Click" Width="120" Height="38" Margin="5" Background="#6C757D" Foreground="White" FontWeight="Bold" BorderThickness="0"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,10">
+                        <Button x:Name="BtnBasicScan" Content="BASIC SCAN" Click="BtnBasicScan_Click" Width="130" Height="36" Margin="8,0" Background="#007ACC" Foreground="White" FontWeight="Bold" BorderThickness="0"/>
+                        <Button x:Name="BtnFullScan" Content="FULL SCAN" Click="BtnFullScan_Click" Width="130" Height="36" Margin="8,0" Background="#6C757D" Foreground="White" FontWeight="Bold" BorderThickness="0"/>
                     </StackPanel>
 
-                    <TextBlock x:Name="TxtProgress" Text="" FontSize="12" Foreground="{DynamicResource ThemeSubTextColor}" HorizontalAlignment="Center" Margin="0,10,0,0" TextTrimming="CharacterEllipsis" Width="340"/>
+                    <!-- Progress Bar -->
+                    <ProgressBar x:Name="ScanProgressBar" Height="8" Width="440" Margin="0,0,0,6" IsIndeterminate="False" Value="0" Maximum="100"/>
+                    <TextBlock x:Name="TxtProgress" Text="Ready to scan" FontSize="11" Foreground="{DynamicResource ThemeSubTextColor}" HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" Width="440"/>
                 </StackPanel>
             </Border>
         </StackPanel>
 
+        <!-- Terminal / Activity Log Area -->
+        <Border Grid.Row="2" Background="{DynamicResource ThemeCardBackground}" BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1" Margin="15,0,15,10" CornerRadius="8" Padding="8">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="24"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <DockPanel Grid.Row="0" LastChildFill="False">
+                    <TextBlock Text="🖥 Activity Terminal" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource ThemeTextColor}" VerticalAlignment="Center" Margin="4,0,0,4"/>
+                    <Button Content="Clear" Click="BtnClearTerminal_Click" DockPanel.Dock="Right" FontSize="10" Padding="6,1" Margin="0,0,4,4"/>
+                </DockPanel>
+                <TextBox x:Name="TxtTerminal" Grid.Row="1" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
+                         FontFamily="Consolas" FontSize="11"
+                         Background="{DynamicResource ThemeControlBackground}"
+                         Foreground="{DynamicResource ThemeTextColor}"
+                         BorderBrush="{DynamicResource ThemeBorderBrush}"
+                         VerticalScrollBarVisibility="Auto" Padding="6"/>
+            </Grid>
+        </Border>
+
         <!-- Footer ClamAV status -->
-        <StatusBar Grid.Row="2" Background="{DynamicResource ThemeStatusBarBackground}">
+        <StatusBar Grid.Row="3" Background="{DynamicResource ThemeStatusBarBackground}">
             <StatusBarItem>
                 <TextBlock x:Name="TxtClamStatus" Text="ClamAV: Ready" FontSize="12" Foreground="{DynamicResource ThemeTextColor}"/>
             </StatusBarItem>
