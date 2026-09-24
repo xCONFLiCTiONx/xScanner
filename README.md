@@ -1,3 +1,5 @@
+<img src="icon.png" width="64" align="left" style="margin-right: 20px; border-radius: 10px;">
+
 # xScanner
 
 **xScanner** is a lightweight, on-demand Windows malware scanner built with C# and WPF (.NET 8.0). It provides fast, efficient system scanning without acting as a resident background antivirus service or kernel driver.
