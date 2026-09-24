@@ -41,6 +41,12 @@ namespace xScanner.UI
 
         private void LogTerminal(string message)
         {
+            if (!Dispatcher.CheckAccess())
+            {
+                Dispatcher.Invoke(() => LogTerminal(message));
+                return;
+            }
+
             string timestamp = DateTime.Now.ToString("HH:mm:ss");
             TxtTerminal.AppendText($"[{timestamp}] {message}\n");
             TxtTerminal.ScrollToEnd();
