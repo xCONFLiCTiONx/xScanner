@@ -8,7 +8,7 @@ namespace xScanner.Core.FileSystem
 {
     public static class FileEnumerator
     {
-        public static IEnumerable<string> GetBasicScanFiles(CancellationToken cancellationToken = default)
+        public static IEnumerable<string> GetBasicScanFiles(List<string>? exclusions = null, CancellationToken cancellationToken = default)
         {
             var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -20,7 +20,7 @@ namespace xScanner.Core.FileSystem
                     foreach (var f in Directory.GetFiles(startupUser, "*.*", SearchOption.AllDirectories))
                     {
                         if (cancellationToken.IsCancellationRequested) return files;
-                        files.Add(f);
+                        if (!IsExcluded(f, exclusions)) files.Add(f);
                     }
 
                 string startupCommon = Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup);
@@ -28,7 +28,7 @@ namespace xScanner.Core.FileSystem
                     foreach (var f in Directory.GetFiles(startupCommon, "*.*", SearchOption.AllDirectories))
                     {
                         if (cancellationToken.IsCancellationRequested) return files;
-                        files.Add(f);
+                        if (!IsExcluded(f, exclusions)) files.Add(f);
                     }
             }
             catch { }
@@ -36,20 +36,20 @@ namespace xScanner.Core.FileSystem
             if (cancellationToken.IsCancellationRequested) return files;
 
             // 2. Downloads, Desktop, Temp, AppData, LocalAppData
-            AddDirectoryFiles(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", files, cancellationToken);
-            AddDirectoryFiles(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Desktop", files, cancellationToken);
-            AddDirectoryFiles(Path.GetTempPath(), "", files, cancellationToken);
-            AddDirectoryFiles(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "", files, cancellationToken);
-            AddDirectoryFiles(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "", files, cancellationToken);
+            AddDirectoryFiles(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", files, exclusions, cancellationToken);
+            AddDirectoryFiles(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Desktop", files, exclusions, cancellationToken);
+            AddDirectoryFiles(Path.GetTempPath(), "", files, exclusions, cancellationToken);
+            AddDirectoryFiles(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "", files, exclusions, cancellationToken);
+            AddDirectoryFiles(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "", files, exclusions, cancellationToken);
 
             if (cancellationToken.IsCancellationRequested) return files;
 
             // 3. Registry Run / RunOnce locations
-            GetRegistryFiles(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Run", files);
-            GetRegistryFiles(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\RunOnce", files);
-            GetRegistryFiles(Registry.LocalMachine, @"Software\Microsoft\Windows\CurrentVersion\Run", files);
-            GetRegistryFiles(Registry.LocalMachine, @"Software\Microsoft\Windows\CurrentVersion\RunOnce", files);
-            GetRegistryFiles(Registry.LocalMachine, @"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run", files);
+            GetRegistryFiles(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\Run", files, exclusions);
+            GetRegistryFiles(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\RunOnce", files, exclusions);
+            GetRegistryFiles(Registry.LocalMachine, @"Software\Microsoft\Windows\CurrentVersion\Run", files, exclusions);
+            GetRegistryFiles(Registry.LocalMachine, @"Software\Microsoft\Windows\CurrentVersion\RunOnce", files, exclusions);
+            GetRegistryFiles(Registry.LocalMachine, @"Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Run", files, exclusions);
 
             return files;
         }
@@ -84,6 +84,7 @@ namespace xScanner.Core.FileSystem
                 foreach (var file in Directory.GetFiles(dir))
                 {
                     if (cancellationToken.IsCancellationRequested) return;
+                    if (IsExcluded(file, exclusions)) continue;
                     files.Add(file);
                 }
 
@@ -97,17 +98,20 @@ namespace xScanner.Core.FileSystem
             catch { }
         }
 
-        private static bool IsExcluded(string path, List<string> exclusions)
+        private static bool IsExcluded(string path, List<string>? exclusions)
         {
+            if (exclusions == null) return false;
             foreach (var excl in exclusions)
             {
-                if (path.StartsWith(excl, StringComparison.OrdinalIgnoreCase))
+                if (string.IsNullOrEmpty(excl)) continue;
+                if (path.StartsWith(excl, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(path, excl, StringComparison.OrdinalIgnoreCase))
                     return true;
             }
             return false;
         }
 
-        private static void AddDirectoryFiles(string basePath, string subFolder, HashSet<string> files, CancellationToken cancellationToken = default)
+        private static void AddDirectoryFiles(string basePath, string subFolder, HashSet<string> files, List<string>? exclusions = null, CancellationToken cancellationToken = default)
         {
             try
             {
@@ -119,18 +123,19 @@ namespace xScanner.Core.FileSystem
                     foreach (var f in Directory.GetFiles(target, "*.*", SearchOption.TopDirectoryOnly))
                     {
                         if (cancellationToken.IsCancellationRequested) return;
-                        files.Add(f);
+                        if (!IsExcluded(f, exclusions)) files.Add(f);
                     }
                     // Also check 1 level subfolders for temp/appdata
                     foreach (var d in Directory.GetDirectories(target))
                     {
                         if (cancellationToken.IsCancellationRequested) return;
+                        if (IsExcluded(d, exclusions)) continue;
                         try
                         {
                             foreach (var f in Directory.GetFiles(d, "*.*", SearchOption.TopDirectoryOnly))
                             {
                                 if (cancellationToken.IsCancellationRequested) return;
-                                files.Add(f);
+                                if (!IsExcluded(f, exclusions)) files.Add(f);
                             }
                         }
                         catch { }
@@ -140,7 +145,7 @@ namespace xScanner.Core.FileSystem
             catch { }
         }
 
-        private static void GetRegistryFiles(RegistryKey rootKey, string subKeyPath, HashSet<string> files)
+        private static void GetRegistryFiles(RegistryKey rootKey, string subKeyPath, HashSet<string> files, List<string>? exclusions = null)
         {
             try
             {
@@ -152,7 +157,7 @@ namespace xScanner.Core.FileSystem
                         string valData = key.GetValue(valName)?.ToString() ?? string.Empty;
                         // Extract file path from command line (e.g. "C:\path\app.exe" /arg -> C:\path\app.exe)
                         string cleanedPath = CleanFilePathFromCommand(valData);
-                        if (!string.IsNullOrEmpty(cleanedPath) && File.Exists(cleanedPath))
+                        if (!string.IsNullOrEmpty(cleanedPath) && File.Exists(cleanedPath) && !IsExcluded(cleanedPath, exclusions))
                         {
                             files.Add(cleanedPath);
                         }

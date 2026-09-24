@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Windows;
 using xScanner.Database;
 using xScanner.Database.Models;
@@ -26,29 +27,62 @@ namespace xScanner.UI
 
         private void BtnRestore_Click(object sender, RoutedEventArgs e)
         {
-            if (DgQuarantine.SelectedItem is QuarantineRecord record)
+            var selectedRecords = DgQuarantine.SelectedItems.OfType<QuarantineRecord>().ToList();
+            if (selectedRecords.Count == 0 && DgQuarantine.SelectedItem is QuarantineRecord single)
+            {
+                selectedRecords.Add(single);
+            }
+
+            if (selectedRecords.Count == 0) return;
+
+            int restoredCount = 0;
+            int failedCount = 0;
+
+            foreach (var record in selectedRecords)
             {
                 if (_quarantineManager.RestoreFile(record.Id, record.OriginalPath, record.QuarantinePath))
                 {
-                    System.Media.SystemSounds.Asterisk.Play();
-                    LoadQuarantine();
+                    restoredCount++;
                 }
                 else
                 {
-                    MessageBox.Show("Failed to restore file.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    failedCount++;
                 }
+            }
+
+            if (restoredCount > 0)
+            {
+                System.Media.SystemSounds.Asterisk.Play();
+                LoadQuarantine();
+            }
+
+            if (failedCount > 0)
+            {
+                MessageBox.Show($"Failed to restore {failedCount} file(s).", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
         private void BtnDelete_Click(object sender, RoutedEventArgs e)
         {
-            if (DgQuarantine.SelectedItem is QuarantineRecord record)
+            var selectedRecords = DgQuarantine.SelectedItems.OfType<QuarantineRecord>().ToList();
+            if (selectedRecords.Count == 0 && DgQuarantine.SelectedItem is QuarantineRecord single)
             {
-                if (MessageBox.Show("Are you sure you want to permanently delete this file?", "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+                selectedRecords.Add(single);
+            }
+
+            if (selectedRecords.Count == 0) return;
+
+            string confirmMsg = selectedRecords.Count == 1
+                ? "Are you sure you want to permanently delete this file?"
+                : $"Are you sure you want to permanently delete {selectedRecords.Count} selected files?";
+
+            if (MessageBox.Show(confirmMsg, "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+            {
+                foreach (var record in selectedRecords)
                 {
                     _quarantineManager.DeletePermanently(record.Id, record.QuarantinePath);
-                    LoadQuarantine();
                 }
+                LoadQuarantine();
             }
         }
     }

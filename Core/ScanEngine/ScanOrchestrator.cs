@@ -45,14 +45,20 @@ namespace xScanner.Core.ScanEngine
             _quarantineManager = new QuarantineManager(database);
         }
 
-        public async Task RunBasicScanAsync(Action<ScanProgressEventArgs> onProgress, CancellationToken cancellationToken = default)
+        public async Task RunBasicScanAsync(List<string>? exclusions, Action<ScanProgressEventArgs> onProgress, CancellationToken cancellationToken = default)
         {
+            exclusions ??= _database.GetExclusions();
             onProgress?.Invoke(new ScanProgressEventArgs { CurrentFile = "Enumerating basic scan locations...", LogMessage = "[INFO] Starting basic scan file enumeration...", IsIndeterminate = true });
-            var files = await Task.Run(() => FileEnumerator.GetBasicScanFiles(cancellationToken), cancellationToken);
+            var files = await Task.Run(() => FileEnumerator.GetBasicScanFiles(exclusions, cancellationToken), cancellationToken);
             var fileList = new List<string>(files);
             if (cancellationToken.IsCancellationRequested) return;
             onProgress?.Invoke(new ScanProgressEventArgs { CurrentFile = $"Found {fileList.Count} files to scan.", LogMessage = $"[INFO] Basic scan enumeration complete. Found {fileList.Count} files.", IsIndeterminate = false, TotalFiles = fileList.Count });
             await RunScanInternalAsync("Basic", fileList, onProgress, cancellationToken);
+        }
+
+        public async Task RunBasicScanAsync(Action<ScanProgressEventArgs> onProgress, CancellationToken cancellationToken = default)
+        {
+            await RunBasicScanAsync(null, onProgress, cancellationToken);
         }
 
         public async Task RunFullScanAsync(List<string> exclusions, Action<ScanProgressEventArgs> onProgress, CancellationToken cancellationToken = default)

@@ -64,6 +64,7 @@ namespace xScanner.Quarantine
 
                 File.Move(quarantinePath, originalPath, true);
                 _database.UpdateQuarantineStatus(quarantineId, "Restored");
+                _database.AddExclusion(originalPath);
                 return true;
             }
             catch
