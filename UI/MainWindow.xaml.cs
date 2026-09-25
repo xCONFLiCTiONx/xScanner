@@ -587,6 +587,13 @@ namespace xScanner.UI
             BtnStopScan.IsEnabled = !enableStartButtons && _isScanning && !_isShutdownInProgress;
         }
 
+        private void BtnHardening_Click(object sender, RoutedEventArgs e)
+        {
+            var hardWindow = new HardeningWindow();
+            hardWindow.Owner = this;
+            hardWindow.ShowDialog();
+        }
+
         private void BtnQuarantine_Click(object sender, RoutedEventArgs e)
         {
             var qWindow = new QuarantineWindow(_database);

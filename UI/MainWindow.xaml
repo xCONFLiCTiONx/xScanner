@@ -17,6 +17,12 @@
         <DockPanel Grid.Row="0" Background="{DynamicResource ThemeHeaderBackground}" LastChildFill="False">
             <TextBlock Text="xScanner" FontSize="20" FontWeight="Bold" VerticalAlignment="Center" Margin="15,0,0,0" Foreground="{DynamicResource ThemeTextColor}"/>
             <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" Margin="0,0,10,0">
+                <Button Click="BtnHardening_Click" Margin="5" Padding="8,4">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock Text="Hardening" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
                 <Button Click="BtnQuarantine_Click" Margin="5" Padding="8,4">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="&#xEA18;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center" Margin="0,0,6,0"/>
