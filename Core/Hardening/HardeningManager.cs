@@ -20,6 +20,31 @@ namespace xScanner.Core.Hardening
             LogProgress?.Invoke(message);
         }
 
+        public bool IsPublicOrOpenWifi()
+        {
+            try
+            {
+                var profiles = GetNetworkProfiles();
+                bool isPublic = profiles.Any(p => p.Contains("Public", StringComparison.OrdinalIgnoreCase));
+
+                bool isOpenWifi = false;
+                string wlanOutput = RunCmd("netsh", "wlan show interfaces");
+                if (wlanOutput.Contains("Authentication", StringComparison.OrdinalIgnoreCase) &&
+                    wlanOutput.Contains("Open", StringComparison.OrdinalIgnoreCase) &&
+                    wlanOutput.Contains("Cipher", StringComparison.OrdinalIgnoreCase) &&
+                    wlanOutput.Contains("None", StringComparison.OrdinalIgnoreCase))
+                {
+                    isOpenWifi = true;
+                }
+
+                return isPublic || isOpenWifi;
+            }
+            catch
+            {
+                return true; // Default to cautious if unknown
+            }
+        }
+
         public async Task<HardeningAuditReport> RunSecurityAuditAsync()
         {
             return await Task.Run(() =>
@@ -29,42 +54,55 @@ namespace xScanner.Core.Hardening
                     ScanTime = DateTime.Now
                 };
 
-                Log("[AUDIT] Starting 6-Step Comprehensive Security Audit...");
+                Log("[AUDIT] Starting Comprehensive Security & Hardening Audit (12 Checks)...");
 
                 // Step 1: Firewall Configuration
-                Log("[AUDIT 1/6] Scanning Network Profiles & Public Firewall Configuration...");
-                var firewallCheck = CheckFirewallConfiguration();
-                report.CheckResults.Add(firewallCheck);
+                Log("[AUDIT 1/12] Scanning Network Profiles & Public Firewall Configuration...");
+                report.CheckResults.Add(CheckFirewallConfiguration());
 
                 // Step 2: File Sharing Check
-                Log("[AUDIT 2/6] Checking File Sharing Services (LanmanServer)...");
-                var fileSharingCheck = CheckFileSharing();
-                report.CheckResults.Add(fileSharingCheck);
+                Log("[AUDIT 2/12] Checking File Sharing Services (LanmanServer)...");
+                report.CheckResults.Add(CheckFileSharing());
 
                 // Step 3: Remote Management & Casting Check
-                Log("[AUDIT 3/6] Checking Remote Management & Casting (SSDP, uPnP, RDP)...");
-                var remoteCheck = CheckRemoteAndCasting();
-                report.CheckResults.Add(remoteCheck);
+                Log("[AUDIT 3/12] Checking Remote Management & Casting (SSDP, uPnP, RDP)...");
+                report.CheckResults.Add(CheckRemoteAndCasting());
 
                 // Step 4: Tracking & Telemetry Audit
-                Log("[AUDIT 4/6] Auditing Privacy, Advertising ID & Telemetry Restrictions...");
-                var telemetryCheck = CheckPrivacyAndTelemetry();
-                report.CheckResults.Add(telemetryCheck);
+                Log("[AUDIT 4/12] Auditing Privacy, Advertising ID & Telemetry Restrictions...");
+                report.CheckResults.Add(CheckPrivacyAndTelemetry());
 
                 // Step 5: Webcam Privacy Lockdown Check
-                Log("[AUDIT 5/6] Auditing Global Webcam Privacy Policy...");
-                var webcamCheck = CheckWebcamLockdown();
-                report.CheckResults.Add(webcamCheck);
+                Log("[AUDIT 5/12] Auditing Global Webcam Privacy Policy...");
+                report.CheckResults.Add(CheckWebcamLockdown());
 
                 // Step 6: Port Shielding Check (Ports 135 & 445)
-                Log("[AUDIT 6/7] Checking Port Shielding Firewall Rules (RPC 135 & SMB 445)...");
-                var portShieldCheck = CheckPortShielding();
-                report.CheckResults.Add(portShieldCheck);
+                Log("[AUDIT 6/12] Checking Port Shielding Firewall Rules (RPC 135 & SMB 445)...");
+                report.CheckResults.Add(CheckPortShielding());
 
                 // Step 7: Encrypted DNS Check (DoH)
-                Log("[AUDIT 7/7] Auditing Encrypted DNS (DNS-over-HTTPS / DoH) Enforcement...");
-                var dohCheck = CheckEncryptedDns();
-                report.CheckResults.Add(dohCheck);
+                Log("[AUDIT 7/12] Auditing Encrypted DNS (DNS-over-HTTPS / DoH) Enforcement...");
+                report.CheckResults.Add(CheckEncryptedDns());
+
+                // Step 8: LLMNR / NetBIOS Poisoning Protections
+                Log("[AUDIT 8/12] Checking LLMNR & NetBIOS Poisoning Protections...");
+                report.CheckResults.Add(CheckLlmnrNetBios());
+
+                // Step 9: PowerShell Logging Audit
+                Log("[AUDIT 9/12] Auditing PowerShell Script Block & Transcription Logging...");
+                report.CheckResults.Add(CheckPowerShellLogging());
+
+                // Step 10: Advanced Inbound Ports & RDP NLA
+                Log("[AUDIT 10/12] Auditing Advanced Inbound Ports & RDP NLA Authentication...");
+                report.CheckResults.Add(CheckAdvancedPorts());
+
+                // Step 11: Windows Defender Tamper Protection
+                Log("[AUDIT 11/12] Auditing Windows Defender Tamper Protection...");
+                report.CheckResults.Add(CheckDefenderTamper());
+
+                // Step 12: Startup Persistence Hunter
+                Log("[AUDIT 12/12] Scanning Auto-Run & Startup Persistence Locations...");
+                report.CheckResults.Add(CheckStartupPersistence());
 
                 // Active Listening Ports Scan
                 Log("[AUDIT] Scanning Active Open Listening TCP Ports...");
@@ -89,104 +127,114 @@ namespace xScanner.Core.Hardening
             });
         }
 
-        public async Task<HardeningAuditReport> ApplyHardeningAndVerifyAsync(DohProvider? provider = null)
+        public async Task<HardeningAuditReport> ApplyHardeningAndVerifyAsync(DohProvider? provider = null, List<HardeningCheckResult>? selectedChecks = null)
         {
             provider ??= DohProvider.GetPopularProviders()[0];
-            Log($"[HARDEN] Initiating Automatic Hardening & System Lockdown with DoH Provider: {provider.Name}...");
+            Log($"[HARDEN] Initiating Selected Hardening & System Lockdown Actions...");
+
+            // If selectedChecks provided, determine which ones are checked
+            bool ShouldApply(string id)
+            {
+                if (selectedChecks == null) return true;
+                var match = selectedChecks.FirstOrDefault(c => c.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+                return match == null || match.IsSelected;
+            }
 
             await Task.Run(() =>
             {
                 // 1. Firewall Configuration
-                Log("[ACTION 1/8] Enabling Public Firewall Profile & Setting Inbound Action to Block...");
-                RunNetsh("advfirewall set publicprofile state on");
-                RunNetsh("advfirewall set publicprofile firewallpolicy blockinbound,allowoutbound");
+                if (ShouldApply("FW_PUBLIC"))
+                {
+                    Log("[ACTION] Enabling Public Firewall Profile & Setting Inbound Action to Block...");
+                    RunNetsh("advfirewall set publicprofile state on");
+                    RunNetsh("advfirewall set publicprofile firewallpolicy blockinbound,allowoutbound");
+                }
 
                 // 2. Disabling File Sharing
-                Log("[ACTION 2/8] Stopping and Disabling LanmanServer (Server) service...");
-                SetServiceDisabledAndStopped("LanmanServer");
+                if (ShouldApply("FILE_SHARING"))
+                {
+                    Log("[ACTION] Stopping and Disabling LanmanServer (Server) service...");
+                    SetServiceDisabledAndStopped("LanmanServer");
+                }
 
                 // 3. Disabling Casting & Discovery Services
-                Log("[ACTION 3/8] Stopping and Disabling SSDP (SSDPSRV) and uPnP (upnphost)...");
-                SetServiceDisabledAndStopped("SSDPSRV");
-                SetServiceDisabledAndStopped("upnphost");
+                if (ShouldApply("REMOTE_CASTING"))
+                {
+                    Log("[ACTION] Stopping and Disabling SSDP (SSDPSRV) and uPnP (upnphost)...");
+                    SetServiceDisabledAndStopped("SSDPSRV");
+                    SetServiceDisabledAndStopped("upnphost");
 
-                // 4. Blocking Remote Desktop (RDP)
-                Log("[ACTION 4/8] Disabling Remote Desktop connections via Registry (fDenyTSConnections)...");
-                SetRegistryValue(
-                    Registry.LocalMachine,
-                    @"SYSTEM\CurrentControlSet\Control\Terminal Server",
-                    "fDenyTSConnections",
-                    1,
-                    RegistryValueKind.DWord
-                );
+                    Log("[ACTION] Disabling Remote Desktop connections via Registry (fDenyTSConnections)...");
+                    SetRegistryValue(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Terminal Server", "fDenyTSConnections", 1, RegistryValueKind.DWord);
+                }
 
-                // 5. Privacy & Telemetry Restrictions
-                Log("[ACTION 5/8] Restricting Advertising ID & Telemetry collection levels...");
-                SetRegistryValue(
-                    Registry.LocalMachine,
-                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo",
-                    "Enabled",
-                    0,
-                    RegistryValueKind.DWord
-                );
-                SetRegistryValue(
-                    Registry.CurrentUser,
-                    @"Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo",
-                    "Enabled",
-                    0,
-                    RegistryValueKind.DWord
-                );
-                SetRegistryValue(
-                    Registry.LocalMachine,
-                    @"SOFTWARE\Policies\Microsoft\Windows\DataCollection",
-                    "AllowTelemetry",
-                    0,
-                    RegistryValueKind.DWord
-                );
+                // 4. Privacy & Telemetry Restrictions
+                if (ShouldApply("PRIVACY_TELEMETRY"))
+                {
+                    Log("[ACTION] Restricting Advertising ID & Telemetry collection levels...");
+                    SetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo", "Enabled", 0, RegistryValueKind.DWord);
+                    SetRegistryValue(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo", "Enabled", 0, RegistryValueKind.DWord);
+                    SetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\DataCollection", "AllowTelemetry", 0, RegistryValueKind.DWord);
+                }
 
-                // 6. Webcam Lockdown
-                Log("[ACTION 6/8] Enforcing Global Privacy Block (Deny) on Webcam Access...");
-                SetRegistryValue(
-                    Registry.LocalMachine,
-                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam",
-                    "Value",
-                    "Deny",
-                    RegistryValueKind.String
-                );
-                SetRegistryValue(
-                    Registry.CurrentUser,
-                    @"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam",
-                    "Value",
-                    "Deny",
-                    RegistryValueKind.String
-                );
+                // 5. Webcam Lockdown
+                if (ShouldApply("WEBCAM_LOCK"))
+                {
+                    Log("[ACTION] Enforcing Global Privacy Block (Deny) on Webcam Access...");
+                    SetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam", "Value", "Deny", RegistryValueKind.String);
+                    SetRegistryValue(Registry.CurrentUser, @"Software\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam", "Value", "Deny", RegistryValueKind.String);
+                }
 
-                // 7. Port Shielding Rules
-                Log("[ACTION 7/8] Adding Inbound Firewall Rules to Shield Ports 135 (RPC) and 445 (SMB)...");
-                RunNetsh("advfirewall firewall delete rule name=\"xScanner_Block_RPC_135\"");
-                RunNetsh("advfirewall firewall add rule name=\"xScanner_Block_RPC_135\" dir=in action=block protocol=TCP localport=135 profile=public");
+                // 6. Port Shielding Rules
+                if (ShouldApply("PORT_SHIELDING"))
+                {
+                    Log("[ACTION] Adding Inbound Firewall Rules to Shield Ports 135 (RPC) and 445 (SMB)...");
+                    RunNetsh("advfirewall firewall delete rule name=\"xScanner_Block_RPC_135\"");
+                    RunNetsh("advfirewall firewall add rule name=\"xScanner_Block_RPC_135\" dir=in action=block protocol=TCP localport=135 profile=public");
 
-                RunNetsh("advfirewall firewall delete rule name=\"xScanner_Block_SMB_445\"");
-                RunNetsh("advfirewall firewall add rule name=\"xScanner_Block_SMB_445\" dir=in action=block protocol=TCP localport=445 profile=public");
+                    RunNetsh("advfirewall firewall delete rule name=\"xScanner_Block_SMB_445\"");
+                    RunNetsh("advfirewall firewall add rule name=\"xScanner_Block_SMB_445\" dir=in action=block protocol=TCP localport=445 profile=public");
+                }
 
-                // 8. Encrypted DNS / DoH Enforcement (IPv4 + IPv6, No Fallback)
-                Log($"[ACTION 8/8] Enforcing DNS-over-HTTPS (DoH) for IPv4 & IPv6 with NO Plaintext Fallback ({provider.Name})...");
-                SetRegistryValue(
-                    Registry.LocalMachine,
-                    @"SYSTEM\CurrentControlSet\Services\Dnscache\Parameters",
-                    "EnableAutoDoh",
-                    2,
-                    RegistryValueKind.DWord
-                );
-                SetRegistryValue(
-                    Registry.LocalMachine,
-                    @"SOFTWARE\Policies\Microsoft\Windows NT\DNSClient",
-                    "EnableAutoDoh",
-                    2,
-                    RegistryValueKind.DWord
-                );
+                // 7. Encrypted DNS / DoH Enforcement
+                if (ShouldApply("ENCRYPTED_DNS"))
+                {
+                    Log($"[ACTION] Enforcing DNS-over-HTTPS (DoH) for IPv4 & IPv6 ({provider.Name})...");
+                    SetRegistryValue(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Services\Dnscache\Parameters", "EnableAutoDoh", 2, RegistryValueKind.DWord);
+                    SetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows NT\DNSClient", "EnableAutoDoh", 2, RegistryValueKind.DWord);
+                    ConfigureDohInWindows11(provider);
+                }
 
-                ConfigureDohInWindows11(provider);
+                // 8. LLMNR / NetBIOS Poisoning Protections
+                if (ShouldApply("LLMNR_NETBIOS"))
+                {
+                    Log("[ACTION] Disabling LLMNR multicast name resolution...");
+                    SetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows NT\DNSClient", "EnableMulticast", 0, RegistryValueKind.DWord);
+                }
+
+                // 9. PowerShell Logging
+                if (ShouldApply("PS_LOGGING"))
+                {
+                    Log("[ACTION] Enabling PowerShell Script Block, Module and Transcription Logging...");
+                    SetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging", "EnableScriptBlockLogging", 1, RegistryValueKind.DWord);
+                    SetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging", "EnableModuleLogging", 1, RegistryValueKind.DWord);
+                    SetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\PowerShell\Transcription", "EnableTranscripting", 1, RegistryValueKind.DWord);
+                }
+
+                // 10. Advanced Ports & RDP NLA
+                if (ShouldApply("ADV_PORTS"))
+                {
+                    Log("[ACTION] Enforcing Network Level Authentication (NLA) for RDP...");
+                    SetRegistryValue(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp", "UserAuthentication", 1, RegistryValueKind.DWord);
+                }
+
+                // 11. Windows Defender Tamper Protection
+                if (ShouldApply("DEFENDER_VBS"))
+                {
+                    Log("[ACTION] Enabling Windows Defender Tamper Protection...");
+                    RunCmd("powershell", "-NoProfile -ExecutionPolicy Bypass -Command \"Set-MpPreference -DisableTamperProtection $false -ErrorAction SilentlyContinue\"");
+                    SetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Microsoft\Windows Defender\Features", "TamperProtection", 1, RegistryValueKind.DWord);
+                }
             });
 
             Log("[HARDEN] Hardening pass finished. Pausing 2 seconds before Auto-Verification Re-Run...");
@@ -194,16 +242,6 @@ namespace xScanner.Core.Hardening
 
             Log("[VERIFY] Running Auto-Verification Audit Pass...");
             var verifiedReport = await RunSecurityAuditAsync();
-
-            if (verifiedReport.IsFullyHardened)
-            {
-                Log("[VERIFY SUCCESS] All security locks and hardening controls are intact!");
-            }
-            else
-            {
-                Log($"[VERIFY NOTICE] Auto-verification complete. Current status: {verifiedReport.PassedChecks}/{verifiedReport.TotalChecks} controls verified.");
-            }
-
             return verifiedReport;
         }
 
@@ -219,8 +257,11 @@ namespace xScanner.Core.Hardening
 
                     RunCmd("netsh", $"dns add encryption server={ip} dohtemplate=\"{provider.TemplateUrl}\" autoupdate=yes");
 
-                    string psCmd = $"Set-DnsClientDohServerAddress -ServerAddress '{ip}' -DohTemplate '{provider.TemplateUrl}' -AllowFallbackToUdp $false -AutoUpgrade $true -ErrorAction SilentlyContinue";
-                    RunCmd("powershell", $"-NoProfile -ExecutionPolicy Bypass -Command \"{psCmd}\"");
+                    string psCmd1 = $"Add-DnsClientDohServerAddress -ServerAddress '{ip}' -DohTemplate '{provider.TemplateUrl}' -AllowFallbackToUdp $false -AutoUpgrade $true -ErrorAction SilentlyContinue";
+                    RunCmd("powershell", $"-NoProfile -ExecutionPolicy Bypass -Command \"{psCmd1}\"");
+
+                    string psCmd2 = $"Set-DnsClientDohServerAddress -ServerAddress '{ip}' -DohTemplate '{provider.TemplateUrl}' -AllowFallbackToUdp $false -AutoUpgrade $true -ErrorAction SilentlyContinue";
+                    RunCmd("powershell", $"-NoProfile -ExecutionPolicy Bypass -Command \"{psCmd2}\"");
                 }
 
                 foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
@@ -230,7 +271,7 @@ namespace xScanner.Core.Hardening
                          ni.NetworkInterfaceType == NetworkInterfaceType.Ethernet))
                     {
                         string alias = ni.Name;
-                        Log($"[DOH CONFIG] Applying IPv4 & IPv6 Encrypted DNS to Adapter '{alias}'...");
+                        Log($"[DOH CONFIG] Applying Encrypted DNS servers to Adapter '{alias}'...");
 
                         string setDnsPs = $"Set-DnsClientServerAddress -InterfaceAlias '{alias}' -ServerAddresses ('{provider.Ipv4Primary}', '{provider.Ipv4Secondary}', '{provider.Ipv6Primary}', '{provider.Ipv6Secondary}') -ErrorAction SilentlyContinue";
                         RunCmd("powershell", $"-NoProfile -ExecutionPolicy Bypass -Command \"{setDnsPs}\"");
@@ -316,7 +357,7 @@ namespace xScanner.Core.Hardening
             }
             catch (Exception ex)
             {
-                result.Status = HardeningStatus.Hardened; // If service doesn't exist, it's effectively disabled
+                result.Status = HardeningStatus.Hardened;
                 result.CurrentValue = $"Not Present / Not Running ({ex.Message})";
             }
 
@@ -515,6 +556,207 @@ namespace xScanner.Core.Hardening
             return result;
         }
 
+        private HardeningCheckResult CheckLlmnrNetBios()
+        {
+            var result = new HardeningCheckResult
+            {
+                Id = "LLMNR_NETBIOS",
+                Category = "Network Security",
+                Name = "LLMNR & NetBIOS Poisoning Protections",
+                Description = "Disables LLMNR (Link-Local Multicast Name Resolution) to prevent local credential relay and spoofing attacks.",
+                RemediationDescription = "Sets EnableMulticast = 0 in DNSClient group policy registry."
+            };
+
+            try
+            {
+                object? val = GetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows NT\DNSClient", "EnableMulticast");
+                bool llmnrDisabled = val is int i && i == 0;
+
+                if (llmnrDisabled)
+                {
+                    result.Status = HardeningStatus.Hardened;
+                    result.CurrentValue = "LLMNR Multicast Disabled (Protected)";
+                }
+                else
+                {
+                    result.Status = HardeningStatus.Vulnerable;
+                    result.CurrentValue = "LLMNR Enabled (Vulnerable to Spoofing)";
+                }
+            }
+            catch (Exception ex)
+            {
+                result.Status = HardeningStatus.Unknown;
+                result.CurrentValue = $"Error: {ex.Message}";
+            }
+
+            return result;
+        }
+
+        private HardeningCheckResult CheckPowerShellLogging()
+        {
+            var result = new HardeningCheckResult
+            {
+                Id = "PS_LOGGING",
+                Category = "Script & System Audit",
+                Name = "PowerShell Script Block & Transcription Logging",
+                Description = "Ensures advanced PowerShell script block and transcription logging is enabled for forensic audit reviews.",
+                RemediationDescription = "Enables ScriptBlockLogging, ModuleLogging and Transcription in registry."
+            };
+
+            try
+            {
+                object? sb = GetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging", "EnableScriptBlockLogging");
+                object? mod = GetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging", "EnableModuleLogging");
+                object? trans = GetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\PowerShell\Transcription", "EnableTranscripting");
+
+                bool sbOn = sb is int i1 && i1 == 1;
+                bool modOn = mod is int i2 && i2 == 1;
+                bool transOn = trans is int i3 && i3 == 1;
+
+                if (sbOn && modOn)
+                {
+                    result.Status = HardeningStatus.Hardened;
+                    result.CurrentValue = "Script Block & Module Logging Active";
+                }
+                else
+                {
+                    result.Status = HardeningStatus.Vulnerable;
+                    result.CurrentValue = "Advanced PowerShell Logging Disabled/Partial";
+                }
+            }
+            catch (Exception ex)
+            {
+                result.Status = HardeningStatus.Unknown;
+                result.CurrentValue = $"Error: {ex.Message}";
+            }
+
+            return result;
+        }
+
+        private HardeningCheckResult CheckAdvancedPorts()
+        {
+            var result = new HardeningCheckResult
+            {
+                Id = "ADV_PORTS",
+                Category = "Remote Access & Protocols",
+                Name = "RDP Network Level Authentication (NLA)",
+                Description = "Ensures Remote Desktop (RDP) requires Network Level Authentication to prevent unauthenticated pre-auth attacks.",
+                RemediationDescription = "Sets UserAuthentication = 1 for RDP-Tcp."
+            };
+
+            try
+            {
+                object? nla = GetRegistryValue(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp", "UserAuthentication");
+                bool nlaEnforced = nla is int i && i == 1;
+
+                if (nlaEnforced)
+                {
+                    result.Status = HardeningStatus.Hardened;
+                    result.CurrentValue = "RDP NLA Enforced (Required)";
+                }
+                else
+                {
+                    object? deny = GetRegistryValue(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Terminal Server", "fDenyTSConnections");
+                    bool rdpDisabled = deny is int d && d == 1;
+
+                    if (rdpDisabled)
+                    {
+                        result.Status = HardeningStatus.Hardened;
+                        result.CurrentValue = "RDP Disabled (NLA N/A)";
+                    }
+                    else
+                    {
+                        result.Status = HardeningStatus.Vulnerable;
+                        result.CurrentValue = "RDP Enabled without Strict NLA";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                result.Status = HardeningStatus.Unknown;
+                result.CurrentValue = $"Error: {ex.Message}";
+            }
+
+            return result;
+        }
+
+        private HardeningCheckResult CheckDefenderTamper()
+        {
+            var result = new HardeningCheckResult
+            {
+                Id = "DEFENDER_VBS",
+                Category = "Endpoint Protection",
+                Name = "Windows Defender",
+                Description = "Ensures Windows Defender and Tamper Protection are active to prevent malware or unauthorized scripts from disabling antivirus settings.",
+                RemediationDescription = "Enables Windows Defender Tamper Protection via PowerShell."
+            };
+
+            try
+            {
+                string output = RunCmd("powershell", "-NoProfile -Command \"(Get-MpComputerStatus -ErrorAction SilentlyContinue).IsTamperProtected\"");
+                bool tpActive = output.Contains("True", StringComparison.OrdinalIgnoreCase);
+
+                if (!tpActive)
+                {
+                    object? tp = GetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Microsoft\Windows Defender\Features", "TamperProtection");
+                    tpActive = tp is int i && i == 1;
+                }
+
+                if (tpActive)
+                {
+                    result.Status = HardeningStatus.Hardened;
+                    result.CurrentValue = "Windows Defender Tamper Protection Active";
+                }
+                else
+                {
+                    result.Status = HardeningStatus.Vulnerable;
+                    result.CurrentValue = "Tamper Protection Disabled or Inactive";
+                }
+            }
+            catch (Exception ex)
+            {
+                result.Status = HardeningStatus.Unknown;
+                result.CurrentValue = $"Error: {ex.Message}";
+            }
+
+            return result;
+        }
+
+        private HardeningCheckResult CheckStartupPersistence()
+        {
+            var result = new HardeningCheckResult
+            {
+                Id = "STARTUP_PERSISTENCE",
+                Category = "Persistence Hunter",
+                Name = "Auto-Run & Startup Persistence Audit",
+                Description = "Scans common Run/RunOnce registry hives and startup folders for auto-starting binaries.",
+                RemediationDescription = "Identifies registry persistence entry count."
+            };
+
+            try
+            {
+                int count = 0;
+                using (var k1 = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Run"))
+                {
+                    if (k1 != null) count += k1.GetValueNames().Length;
+                }
+                using (var k2 = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"))
+                {
+                    if (k2 != null) count += k2.GetValueNames().Length;
+                }
+
+                result.Status = HardeningStatus.Hardened;
+                result.CurrentValue = $"{count} Startup Persistence Entry(ies) Detected";
+            }
+            catch (Exception ex)
+            {
+                result.Status = HardeningStatus.Unknown;
+                result.CurrentValue = $"Error: {ex.Message}";
+            }
+
+            return result;
+        }
+
         #endregion
 
         #region Helper Utilities
@@ -544,7 +786,7 @@ namespace xScanner.Core.Hardening
                         if (lastColon > 0 && int.TryParse(localAddr.Substring(lastColon + 1), out int port))
                         {
                             string ip = localAddr.Substring(0, lastColon);
-                            if (ip.Equals("127.0.0.1") || ip.Equals("[::1]")) continue; // Skip local loopback
+                            if (ip.Equals("127.0.0.1") || ip.Equals("[::1]")) continue;
 
                             int pid = 0;
                             if (parts.Length >= 5) int.TryParse(parts[4], out pid);
@@ -560,7 +802,6 @@ namespace xScanner.Core.Hardening
                                 State = state
                             };
 
-                            // Check sensitive ports
                             switch (port)
                             {
                                 case 135:
@@ -583,12 +824,6 @@ namespace xScanner.Core.Hardening
                                     info.SensitiveDescription = "Remote Desktop Protocol (RDP)";
                                     object? rdp = GetRegistryValue(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Control\Terminal Server", "fDenyTSConnections");
                                     info.IsShielded = rdp is int i && i == 1;
-                                    break;
-                                case 5985:
-                                case 5986:
-                                    info.IsSensitive = true;
-                                    info.SensitiveDescription = "Windows Remote Management (WinRM)";
-                                    info.IsShielded = IsServiceStoppedOrDisabled("WinRM");
                                     break;
                             }
 
@@ -666,11 +901,9 @@ namespace xScanner.Core.Hardening
         {
             object? dohServVal = GetRegistryValue(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Services\Dnscache\Parameters", "EnableAutoDoh");
             object? dohPolicyVal = GetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows NT\DNSClient", "EnableAutoDoh");
-            object? dohPolicyVal2 = GetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows NT\DNSClient", "EnableDoH");
 
             int servMode = dohServVal is int s ? s : 0;
-            int policyMode = dohPolicyVal is int p1 ? p1 : (dohPolicyVal2 is int p2 ? p2 : 0);
-
+            int policyMode = dohPolicyVal is int p1 ? p1 : 0;
             int effectiveMode = Math.Max(servMode, policyMode);
 
             string netshEncryption = RunCmd("netsh", "dns show encryption");
@@ -687,50 +920,19 @@ namespace xScanner.Core.Hardening
                 }
             }
 
-            if (templates.Count == 0 && activeDnsServers != null)
-            {
-                if (activeDnsServers.Any(d => d.StartsWith("1.1.1.") || d.StartsWith("1.0.0.")))
-                {
-                    templates.Add("https://security.cloudflare-dns.com/dns-query");
-                }
-                else if (activeDnsServers.Any(d => d.StartsWith("8.8.8.") || d.StartsWith("8.8.4.")))
-                {
-                    templates.Add("https://dns.google/dns-query");
-                }
-                else if (activeDnsServers.Any(d => d.StartsWith("9.9.9.") || d.StartsWith("149.112.")))
-                {
-                    templates.Add("https://dns.quad9.net/dns-query");
-                }
-            }
-
             bool isDohActive = effectiveMode > 0 || templates.Count > 0;
 
             if (effectiveMode == 2)
             {
-                return (
-                    HardeningStatus.Hardened,
-                    "DoH Enforced (Encrypted DNS Strictly Required)",
-                    "Enforced (Strict DoH Required)",
-                    templates
-                );
+                return (HardeningStatus.Hardened, "DoH Enforced (Encrypted DNS Strictly Required)", "Enforced (Strict DoH Required)", templates);
             }
             else if (isDohActive)
             {
-                return (
-                    HardeningStatus.Hardened,
-                    "DoH Allowed/Active (Encrypted DNS Active)",
-                    "Allowed/Active (Auto DoH)",
-                    templates
-                );
+                return (HardeningStatus.Hardened, "DoH Allowed/Active (Encrypted DNS Active)", "Allowed/Active (Auto DoH)", templates);
             }
             else
             {
-                return (
-                    HardeningStatus.Vulnerable,
-                    "DoH Disabled / Inactive (Plaintext Unencrypted DNS)",
-                    "Disabled / Inactive (Unencrypted)",
-                    templates
-                );
+                return (HardeningStatus.Vulnerable, "DoH Disabled / Inactive (Plaintext Unencrypted DNS)", "Disabled / Inactive (Unencrypted)", templates);
             }
         }
 
@@ -763,7 +965,7 @@ namespace xScanner.Core.Hardening
             }
             catch
             {
-                return true; // Not installed = stopped
+                return true;
             }
         }
 

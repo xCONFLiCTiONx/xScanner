@@ -101,6 +101,7 @@ namespace xScanner.Core.Hardening
         public HardeningStatus Status { get; set; } = HardeningStatus.Unknown;
         public string CurrentValue { get; set; } = string.Empty;
         public string RemediationDescription { get; set; } = string.Empty;
+        public bool IsSelected { get; set; } = true;
 
         public string StatusIcon => Status switch
         {

@@ -1,65 +1,63 @@
 <Window x:Class="xScanner.UI.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Settings" Height="650" Width="540"
+        Title="Settings" Height="670" Width="540"
         ResizeMode="NoResize" WindowStartupLocation="CenterOwner"
         Background="{DynamicResource ThemeWindowBackground}">
-    <Grid Margin="20">
+    <Grid Margin="15">
         <StackPanel>
-            <TextBlock Text="Automatic Scan Settings" FontWeight="Bold" Margin="0,0,0,5" Foreground="{DynamicResource ThemeTextColor}"/>
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+            <TextBlock Text="Automatic Scan Settings" FontWeight="Bold" Margin="0,0,0,4" Foreground="{DynamicResource ThemeTextColor}"/>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                 <TextBlock Text="Mode:" Width="100" VerticalAlignment="Center" Foreground="{DynamicResource ThemeTextColor}"/>
-                <ComboBox x:Name="CbAutoMode" Width="220">
+                <ComboBox x:Name="CbAutoMode" Width="220" SelectionChanged="CbAutoMode_SelectionChanged">
                     <ComboBoxItem Content="Disabled"/>
                     <ComboBoxItem Content="Basic"/>
                     <ComboBoxItem Content="Full"/>
                 </ComboBox>
             </StackPanel>
 
-            <TextBlock Text="Full Scan Exclusions" FontWeight="Bold" Margin="0,10,0,5" Foreground="{DynamicResource ThemeTextColor}"/>
-            <ListBox x:Name="LbExclusions" Height="70" Margin="0,0,0,5"/>
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+            <TextBlock Text="Full Scan Exclusions" FontWeight="Bold" Margin="0,4,0,4" Foreground="{DynamicResource ThemeTextColor}"/>
+            <ListBox x:Name="LbExclusions" Height="65" Margin="0,0,0,4"/>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
                 <TextBox x:Name="TxtNewExclusion" Width="250" Margin="0,0,5,0" VerticalContentAlignment="Center"/>
                 <Button Content="Browse..." Click="BtnBrowseExclusion_Click" Width="75" Margin="0,0,5,0"/>
                 <Button Content="Add" Click="BtnAddExclusion_Click" Width="55" Margin="0,0,5,0"/>
                 <Button Content="Remove" Click="BtnRemoveExclusion_Click" Width="70"/>
             </StackPanel>
 
-            <Separator Margin="0,5,0,10"/>
+            <Separator Margin="0,2,0,8"/>
 
-            <TextBlock Text="ClamAV Engine &amp; Definitions" FontWeight="Bold" Margin="0,0,0,5" Foreground="{DynamicResource ThemeTextColor}"/>
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+            <TextBlock Text="ClamAV Engine &amp; Definitions" FontWeight="Bold" Margin="0,0,0,4" Foreground="{DynamicResource ThemeTextColor}"/>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                 <TextBlock Text="ClamAV Path:" Width="100" VerticalAlignment="Center" Foreground="{DynamicResource ThemeTextColor}"/>
                 <TextBox x:Name="TxtClamPath" Width="380" Margin="0,0,0,0" IsReadOnly="True" Background="{DynamicResource ThemeControlBackground}" Foreground="{DynamicResource ThemeTextColor}" VerticalContentAlignment="Center"/>
             </StackPanel>
 
-            <TextBlock x:Name="TxtClamStatus" Text="Status: Checking..." FontSize="12" Foreground="{DynamicResource ThemeSubTextColor}" Margin="100,0,0,3"/>
-            <TextBlock x:Name="TxtDefinitionInfo" Text="Definitions: Unknown" FontSize="12" Foreground="{DynamicResource ThemeSubTextColor}" Margin="100,0,0,10"/>
+            <TextBlock x:Name="TxtClamStatus" Text="Status: Checking..." FontSize="12" Foreground="{DynamicResource ThemeSubTextColor}" Margin="100,0,0,2"/>
+            <TextBlock x:Name="TxtDefinitionInfo" Text="Definitions: Unknown" FontSize="12" Foreground="{DynamicResource ThemeSubTextColor}" Margin="100,0,0,6"/>
 
-            <StackPanel Orientation="Horizontal" Margin="100,0,0,10">
-                <Button x:Name="BtnInstallClam" Content="Download / Install ClamAV" Click="BtnInstallClam_Click" Width="200" Height="30" Background="#28A745" Foreground="White" FontWeight="Bold"/>
-                <Button x:Name="BtnUpdateDefs" Content="Update Definitions" Click="BtnUpdateDefs_Click" Width="140" Height="30" Margin="10,0,0,0" Background="#17A2B8" Foreground="White"/>
+            <StackPanel Orientation="Horizontal" Margin="100,0,0,8">
+                <Button x:Name="BtnInstallClam" Content="Download / Install ClamAV" Click="BtnInstallClam_Click" Width="190" Height="28" Background="#28A745" Foreground="White" FontWeight="Bold"/>
+                <Button x:Name="BtnUpdateDefs" Content="Update Definitions" Click="BtnUpdateDefs_Click" Width="135" Height="28" Margin="10,0,0,0" Background="#17A2B8" Foreground="White"/>
             </StackPanel>
 
-            <ProgressBar x:Name="PbInstall" Height="15" Margin="100,0,0,10" Maximum="100" Value="0" Visibility="Collapsed"/>
-            <TextBlock x:Name="TxtInstallProgress" Text="" FontSize="11" Foreground="{DynamicResource ThemeSubTextColor}" Margin="100,0,0,10"/>
+            <ProgressBar x:Name="PbInstall" Height="12" Margin="100,0,0,6" Maximum="100" Value="0" Visibility="Collapsed"/>
+            <TextBlock x:Name="TxtInstallProgress" Text="" FontSize="11" Foreground="{DynamicResource ThemeSubTextColor}" Margin="100,0,0,6"/>
 
-            <Separator Margin="0,5,0,10"/>
+            <Separator Margin="0,2,0,8"/>
 
-            <TextBlock Text="Scheduled Task (Weekly 1 AM Scan)" FontWeight="Bold" Margin="0,0,0,5" Foreground="{DynamicResource ThemeTextColor}"/>
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-                <Button x:Name="BtnScheduleTask" Content="Create Scheduled Scan (1 AM, Wake PC)" Click="BtnScheduleTask_Click" Width="270" Height="30" Margin="0,0,10,0" Background="#007ACC" Foreground="White" FontWeight="Bold"/>
+            <TextBlock Text="Scheduled Task (Weekly 1 AM Scan)" FontWeight="Bold" Margin="0,0,0,4" Foreground="{DynamicResource ThemeTextColor}"/>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <Button x:Name="BtnScheduleTask" Content="Create Scheduled Scan (1 AM, Wake PC)" Click="BtnScheduleTask_Click" Width="260" Height="28" Margin="0,0,10,0" Background="#007ACC" Foreground="White" FontWeight="Bold"/>
                 <TextBlock x:Name="TxtTaskStatus" Text="Status: Checking..." VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource ThemeSubTextColor}"/>
             </StackPanel>
-            <TextBlock Text="Runs once a week at 1:00 AM with highest privileges, wakes PC if asleep, and auto-closes when complete." FontSize="11" Foreground="{DynamicResource ThemeSubTextColor}" Margin="0,0,0,10"/>
+            <TextBlock Text="Runs once a week at 1:00 AM with highest privileges, wakes PC if asleep, and auto-closes when complete." FontSize="11" Foreground="{DynamicResource ThemeSubTextColor}" Margin="0,0,0,8"/>
 
-            <Separator Margin="0,5,0,10"/>
+            <Separator Margin="0,2,0,8"/>
 
-            <TextBlock Text="Notifications &amp; Security Alerts" FontWeight="Bold" Margin="0,0,0,5" Foreground="{DynamicResource ThemeTextColor}"/>
-            <CheckBox x:Name="CbEnableAllNotifications" Content="Enable System Tray Toast Notifications (Master Switch)" Margin="0,0,0,5" Foreground="{DynamicResource ThemeTextColor}" Checked="CbEnableAllNotifications_Changed" Unchecked="CbEnableAllNotifications_Changed"/>
-            <CheckBox x:Name="CbEnableHardeningAlerts" Content="Show Recommended Security Settings &amp; Vulnerability Alerts" Margin="20,0,0,15" Foreground="{DynamicResource ThemeTextColor}"/>
-
-            <Button Content="Save Settings" Click="BtnSave_Click" Width="120" Height="30" HorizontalAlignment="Right" Background="#007ACC" Foreground="White" FontWeight="Bold"/>
+            <TextBlock Text="Notifications &amp; Security Alerts" FontWeight="Bold" Margin="0,0,0,4" Foreground="{DynamicResource ThemeTextColor}"/>
+            <CheckBox x:Name="CbEnableAllNotifications" Content="Enable System Tray Toast Notifications (Master Switch)" Margin="0,0,0,4" Foreground="{DynamicResource ThemeTextColor}" Checked="CbEnableAllNotifications_Changed" Unchecked="CbEnableAllNotifications_Changed"/>
+            <CheckBox x:Name="CbEnableHardeningAlerts" Content="Show Recommended Security Settings &amp; Vulnerability Alerts" Margin="20,0,0,4" Foreground="{DynamicResource ThemeTextColor}" Checked="CbEnableHardeningAlerts_Changed" Unchecked="CbEnableHardeningAlerts_Changed"/>
         </StackPanel>
     </Grid>
 </Window>

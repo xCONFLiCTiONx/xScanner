@@ -62,41 +62,23 @@ namespace xScanner.UI
             if (_isBusy) return;
 
             var selectedProvider = CbDohProvider.SelectedItem as DohProvider ?? DohProvider.GetPopularProviders()[0];
-
-            var result = System.Windows.MessageBox.Show(
-                $"Hardening will enforce Encrypted DNS (DoH) using {selectedProvider.Name} for IPv4 & IPv6 with no plaintext fallback, enable Public Firewall, stop/disable file sharing (LanmanServer) and casting services (SSDP/uPnP), block inbound Remote Desktop, disable Advertising ID tracking, restrict telemetry, block global webcam access, and shield TCP ports 135 & 445.\n\nDo you wish to apply these hardening measures now?",
-                "Confirm System Hardening",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning
-            );
-
-            if (result != MessageBoxResult.Yes) return;
+            var selectedChecks = IcChecks.ItemsSource as List<HardeningCheckResult>;
 
             SetBusyState(true);
-            TxtSummaryTitle.Text = "Applying Hardening & Lockdown Actions...";
+            TxtSummaryTitle.Text = "Applying Selected Hardening & Lockdown Actions...";
 
             try
             {
-                var report = await _manager.ApplyHardeningAndVerifyAsync(selectedProvider);
+                var report = await _manager.ApplyHardeningAndVerifyAsync(selectedProvider, selectedChecks);
                 UpdateUiFromReport(report);
 
                 if (report.IsFullyHardened)
                 {
-                    System.Windows.MessageBox.Show(
-                        "System Hardening complete! All security controls were verified and are fully active.",
-                        "Hardening Success",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Information
-                    );
+                    LogTerminal("[HARDEN SUCCESS] All selected security controls verified and fully active.");
                 }
                 else
                 {
-                    System.Windows.MessageBox.Show(
-                        $"Hardening pass completed. Verified {report.PassedChecks} of {report.TotalChecks} controls. Check terminal log for details.",
-                        "Hardening Status",
-                        MessageBoxButton.OK,
-                        MessageBoxImage.Warning
-                    );
+                    LogTerminal($"[HARDEN NOTICE] Hardening pass completed. Verified {report.PassedChecks} of {report.TotalChecks} controls.");
                     CheckAndSendVulnerabilityNotification(report);
                 }
             }
@@ -168,23 +150,27 @@ namespace xScanner.UI
 
                 if (!allNotifications || !hardeningAlerts) return;
 
-                if (report.FailedChecks > 0)
-                {
-                    var failedChecks = report.CheckResults
-                        .Where(c => c.Status != HardeningStatus.Hardened)
-                        .Select(c => c.Name)
-                        .ToList();
+                // Network check: if private network and not open Wi-Fi, it's fine (no alerts)
+                if (!_manager.IsPublicOrOpenWifi()) return;
 
+                // Only consider checks selected by the user
+                var failedSelectedChecks = report.CheckResults
+                    .Where(c => c.IsSelected && c.Status != HardeningStatus.Hardened)
+                    .Select(c => c.Name)
+                    .ToList();
+
+                if (failedSelectedChecks.Count > 0)
+                {
                     string title = "xScanner Security Warning";
                     string message;
 
-                    if (failedChecks.Count <= 3)
+                    if (failedSelectedChecks.Count <= 3)
                     {
-                        message = "Security weaknesses detected on your system:\n• " + string.Join("\n• ", failedChecks) + "\n\nClick to review and apply hardening fixes.";
+                        message = "Security weaknesses detected on your system:\n• " + string.Join("\n• ", failedSelectedChecks) + "\n\nClick to review and apply hardening fixes.";
                     }
                     else
                     {
-                        message = $"{report.FailedChecks} security vulnerabilities detected on your computer! Please open xScanner Hardening to apply recommended fixes.";
+                        message = $"{failedSelectedChecks.Count} security vulnerabilities detected on your computer! Please open xScanner Hardening to apply recommended fixes.";
                     }
 
                     if (System.Windows.Application.Current.MainWindow is MainWindow mainWin)

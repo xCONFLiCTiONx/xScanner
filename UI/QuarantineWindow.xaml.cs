@@ -72,18 +72,11 @@ namespace xScanner.UI
 
             if (selectedRecords.Count == 0) return;
 
-            string confirmMsg = selectedRecords.Count == 1
-                ? "Are you sure you want to permanently delete this file?"
-                : $"Are you sure you want to permanently delete {selectedRecords.Count} selected files?";
-
-            if (System.Windows.MessageBox.Show(confirmMsg, "Confirm Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning) == MessageBoxResult.Yes)
+            foreach (var record in selectedRecords)
             {
-                foreach (var record in selectedRecords)
-                {
-                    _quarantineManager.DeletePermanently(record.Id, record.QuarantinePath);
-                }
-                LoadQuarantine();
+                _quarantineManager.DeletePermanently(record.Id, record.QuarantinePath);
             }
+            LoadQuarantine();
         }
     }
 }

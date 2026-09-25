@@ -13,6 +13,7 @@ namespace xScanner.UI
     {
         private readonly ScanDatabase _database;
         private readonly ClamAvManager _clamManager;
+        private bool _isInitialized = false;
 
         public SettingsWindow(ScanDatabase database)
         {
@@ -21,6 +22,7 @@ namespace xScanner.UI
             _clamManager = new ClamAvManager(database);
             ThemeHelper.ApplyTheme(this);
             LoadSettings();
+            _isInitialized = true;
         }
 
         private void LoadSettings()
@@ -215,24 +217,31 @@ namespace xScanner.UI
             }
         }
 
+        private void CbAutoMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!_isInitialized) return;
+            string mode = (CbAutoMode.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Basic";
+            _database.SetSetting("AutomaticScanMode", mode);
+        }
+
         private void CbEnableAllNotifications_Changed(object sender, RoutedEventArgs e)
         {
             if (CbEnableHardeningAlerts != null && CbEnableAllNotifications != null)
             {
                 CbEnableHardeningAlerts.IsEnabled = CbEnableAllNotifications.IsChecked == true;
+                if (_isInitialized)
+                {
+                    _database.SetSetting("EnableAllNotifications", (CbEnableAllNotifications.IsChecked == true).ToString());
+                }
             }
         }
 
-        private void BtnSave_Click(object sender, RoutedEventArgs e)
+        private void CbEnableHardeningAlerts_Changed(object sender, RoutedEventArgs e)
         {
-            string mode = (CbAutoMode.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Basic";
-            _database.SetSetting("AutomaticScanMode", mode);
-            _database.SetSetting("ClamScanPath", TxtClamPath.Text.Trim());
-
-            _database.SetSetting("EnableAllNotifications", (CbEnableAllNotifications.IsChecked == true).ToString());
-            _database.SetSetting("EnableHardeningAlerts", (CbEnableHardeningAlerts.IsChecked == true).ToString());
-
-            Close();
+            if (_isInitialized && CbEnableHardeningAlerts != null)
+            {
+                _database.SetSetting("EnableHardeningAlerts", (CbEnableHardeningAlerts.IsChecked == true).ToString());
+            }
         }
     }
 }
