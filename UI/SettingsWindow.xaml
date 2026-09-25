@@ -51,7 +51,13 @@
                 <Button x:Name="BtnScheduleTask" Content="Create Scheduled Scan (1 AM, Wake PC)" Click="BtnScheduleTask_Click" Width="270" Height="30" Margin="0,0,10,0" Background="#007ACC" Foreground="White" FontWeight="Bold"/>
                 <TextBlock x:Name="TxtTaskStatus" Text="Status: Checking..." VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource ThemeSubTextColor}"/>
             </StackPanel>
-            <TextBlock Text="Runs once a week at 1:00 AM with highest privileges, wakes PC if asleep, and auto-closes when complete." FontSize="11" Foreground="{DynamicResource ThemeSubTextColor}" Margin="0,0,0,15"/>
+            <TextBlock Text="Runs once a week at 1:00 AM with highest privileges, wakes PC if asleep, and auto-closes when complete." FontSize="11" Foreground="{DynamicResource ThemeSubTextColor}" Margin="0,0,0,10"/>
+
+            <Separator Margin="0,5,0,10"/>
+
+            <TextBlock Text="Notifications &amp; Security Alerts" FontWeight="Bold" Margin="0,0,0,5" Foreground="{DynamicResource ThemeTextColor}"/>
+            <CheckBox x:Name="CbEnableAllNotifications" Content="Enable System Tray Toast Notifications (Master Switch)" Margin="0,0,0,5" Foreground="{DynamicResource ThemeTextColor}" Checked="CbEnableAllNotifications_Changed" Unchecked="CbEnableAllNotifications_Changed"/>
+            <CheckBox x:Name="CbEnableHardeningAlerts" Content="Show Recommended Security Settings &amp; Vulnerability Alerts" Margin="20,0,0,15" Foreground="{DynamicResource ThemeTextColor}"/>
 
             <Button Content="Save Settings" Click="BtnSave_Click" Width="120" Height="30" HorizontalAlignment="Right" Background="#007ACC" Foreground="White" FontWeight="Bold"/>
         </StackPanel>

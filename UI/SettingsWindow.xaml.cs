@@ -34,6 +34,13 @@ namespace xScanner.UI
                 _ => 1
             };
 
+            bool enableAll = bool.Parse(_database.GetSetting("EnableAllNotifications", "True"));
+            bool enableHardening = bool.Parse(_database.GetSetting("EnableHardeningAlerts", "True"));
+
+            CbEnableAllNotifications.IsChecked = enableAll;
+            CbEnableHardeningAlerts.IsChecked = enableHardening;
+            CbEnableHardeningAlerts.IsEnabled = enableAll;
+
             TxtClamPath.Text = _clamManager.GetEngineDirectory();
             RefreshClamStatus();
             RefreshExclusions();
@@ -208,11 +215,23 @@ namespace xScanner.UI
             }
         }
 
+        private void CbEnableAllNotifications_Changed(object sender, RoutedEventArgs e)
+        {
+            if (CbEnableHardeningAlerts != null && CbEnableAllNotifications != null)
+            {
+                CbEnableHardeningAlerts.IsEnabled = CbEnableAllNotifications.IsChecked == true;
+            }
+        }
+
         private void BtnSave_Click(object sender, RoutedEventArgs e)
         {
             string mode = (CbAutoMode.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Basic";
             _database.SetSetting("AutomaticScanMode", mode);
             _database.SetSetting("ClamScanPath", TxtClamPath.Text.Trim());
+
+            _database.SetSetting("EnableAllNotifications", (CbEnableAllNotifications.IsChecked == true).ToString());
+            _database.SetSetting("EnableHardeningAlerts", (CbEnableHardeningAlerts.IsChecked == true).ToString());
+
             Close();
         }
     }

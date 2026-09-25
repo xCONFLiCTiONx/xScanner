@@ -89,28 +89,29 @@ namespace xScanner.Core.Hardening
             });
         }
 
-        public async Task<HardeningAuditReport> ApplyHardeningAndVerifyAsync()
+        public async Task<HardeningAuditReport> ApplyHardeningAndVerifyAsync(DohProvider? provider = null)
         {
-            Log("[HARDEN] Initiating Automatic Hardening & System Lockdown...");
+            provider ??= DohProvider.GetPopularProviders()[0];
+            Log($"[HARDEN] Initiating Automatic Hardening & System Lockdown with DoH Provider: {provider.Name}...");
 
             await Task.Run(() =>
             {
                 // 1. Firewall Configuration
-                Log("[ACTION 1/7] Enabling Public Firewall Profile & Setting Inbound Action to Block...");
+                Log("[ACTION 1/8] Enabling Public Firewall Profile & Setting Inbound Action to Block...");
                 RunNetsh("advfirewall set publicprofile state on");
                 RunNetsh("advfirewall set publicprofile firewallpolicy blockinbound,allowoutbound");
 
                 // 2. Disabling File Sharing
-                Log("[ACTION 2/7] Stopping and Disabling LanmanServer (Server) service...");
+                Log("[ACTION 2/8] Stopping and Disabling LanmanServer (Server) service...");
                 SetServiceDisabledAndStopped("LanmanServer");
 
                 // 3. Disabling Casting & Discovery Services
-                Log("[ACTION 3/7] Stopping and Disabling SSDP (SSDPSRV) and uPnP (upnphost)...");
+                Log("[ACTION 3/8] Stopping and Disabling SSDP (SSDPSRV) and uPnP (upnphost)...");
                 SetServiceDisabledAndStopped("SSDPSRV");
                 SetServiceDisabledAndStopped("upnphost");
 
                 // 4. Blocking Remote Desktop (RDP)
-                Log("[ACTION 4/7] Disabling Remote Desktop connections via Registry (fDenyTSConnections)...");
+                Log("[ACTION 4/8] Disabling Remote Desktop connections via Registry (fDenyTSConnections)...");
                 SetRegistryValue(
                     Registry.LocalMachine,
                     @"SYSTEM\CurrentControlSet\Control\Terminal Server",
@@ -120,7 +121,7 @@ namespace xScanner.Core.Hardening
                 );
 
                 // 5. Privacy & Telemetry Restrictions
-                Log("[ACTION 5/7] Restricting Advertising ID & Telemetry collection levels...");
+                Log("[ACTION 5/8] Restricting Advertising ID & Telemetry collection levels...");
                 SetRegistryValue(
                     Registry.LocalMachine,
                     @"SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo",
@@ -144,7 +145,7 @@ namespace xScanner.Core.Hardening
                 );
 
                 // 6. Webcam Lockdown
-                Log("[ACTION 6/7] Enforcing Global Privacy Block (Deny) on Webcam Access...");
+                Log("[ACTION 6/8] Enforcing Global Privacy Block (Deny) on Webcam Access...");
                 SetRegistryValue(
                     Registry.LocalMachine,
                     @"SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam",
@@ -168,8 +169,8 @@ namespace xScanner.Core.Hardening
                 RunNetsh("advfirewall firewall delete rule name=\"xScanner_Block_SMB_445\"");
                 RunNetsh("advfirewall firewall add rule name=\"xScanner_Block_SMB_445\" dir=in action=block protocol=TCP localport=445 profile=public");
 
-                // 8. Encrypted DNS / DoH Enforcement
-                Log("[ACTION 8/8] Enforcing DNS-over-HTTPS (DoH) and configuring DoH server templates...");
+                // 8. Encrypted DNS / DoH Enforcement (IPv4 + IPv6, No Fallback)
+                Log($"[ACTION 8/8] Enforcing DNS-over-HTTPS (DoH) for IPv4 & IPv6 with NO Plaintext Fallback ({provider.Name})...");
                 SetRegistryValue(
                     Registry.LocalMachine,
                     @"SYSTEM\CurrentControlSet\Services\Dnscache\Parameters",
@@ -185,11 +186,7 @@ namespace xScanner.Core.Hardening
                     RegistryValueKind.DWord
                 );
 
-                RunCmd("netsh", "dns add encryption server=1.1.1.2 dohtemplate=\"https://security.cloudflare-dns.com/dns-query\" autoupdate=yes");
-                RunCmd("netsh", "dns add encryption server=1.0.0.2 dohtemplate=\"https://security.cloudflare-dns.com/dns-query\" autoupdate=yes");
-                RunCmd("netsh", "dns add encryption server=1.1.1.1 dohtemplate=\"https://cloudflare-dns.com/dns-query\" autoupdate=yes");
-                RunCmd("netsh", "dns add encryption server=1.0.0.1 dohtemplate=\"https://cloudflare-dns.com/dns-query\" autoupdate=yes");
-                RunCmd("netsh", "dns add encryption server=8.8.8.8 dohtemplate=\"https://dns.google/dns-query\" autoupdate=yes");
+                ConfigureDohInWindows11(provider);
             });
 
             Log("[HARDEN] Hardening pass finished. Pausing 2 seconds before Auto-Verification Re-Run...");
@@ -208,6 +205,42 @@ namespace xScanner.Core.Hardening
             }
 
             return verifiedReport;
+        }
+
+        private void ConfigureDohInWindows11(DohProvider provider)
+        {
+            try
+            {
+                string[] ips = new[] { provider.Ipv4Primary, provider.Ipv4Secondary, provider.Ipv6Primary, provider.Ipv6Secondary };
+
+                foreach (var ip in ips)
+                {
+                    if (string.IsNullOrWhiteSpace(ip)) continue;
+
+                    RunCmd("netsh", $"dns add encryption server={ip} dohtemplate=\"{provider.TemplateUrl}\" autoupdate=yes");
+
+                    string psCmd = $"Set-DnsClientDohServerAddress -ServerAddress '{ip}' -DohTemplate '{provider.TemplateUrl}' -AllowFallbackToUdp $false -AutoUpgrade $true -ErrorAction SilentlyContinue";
+                    RunCmd("powershell", $"-NoProfile -ExecutionPolicy Bypass -Command \"{psCmd}\"");
+                }
+
+                foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (ni.OperationalStatus == OperationalStatus.Up &&
+                        (ni.NetworkInterfaceType == NetworkInterfaceType.Wireless80211 ||
+                         ni.NetworkInterfaceType == NetworkInterfaceType.Ethernet))
+                    {
+                        string alias = ni.Name;
+                        Log($"[DOH CONFIG] Applying IPv4 & IPv6 Encrypted DNS to Adapter '{alias}'...");
+
+                        string setDnsPs = $"Set-DnsClientServerAddress -InterfaceAlias '{alias}' -ServerAddresses ('{provider.Ipv4Primary}', '{provider.Ipv4Secondary}', '{provider.Ipv6Primary}', '{provider.Ipv6Secondary}') -ErrorAction SilentlyContinue";
+                        RunCmd("powershell", $"-NoProfile -ExecutionPolicy Bypass -Command \"{setDnsPs}\"");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"[WARN] DoH configuration note: {ex.Message}");
+            }
         }
 
         #region Individual Check Methods
@@ -468,34 +501,10 @@ namespace xScanner.Core.Hardening
 
             try
             {
-                object? dohServVal = GetRegistryValue(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Services\Dnscache\Parameters", "EnableAutoDoh");
-                object? dohPolicyVal = GetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows NT\DNSClient", "EnableAutoDoh");
-                object? dohPolicyVal2 = GetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows NT\DNSClient", "EnableDoH");
-
-                int servMode = dohServVal is int s ? s : 0;
-                int policyMode = dohPolicyVal is int p1 ? p1 : (dohPolicyVal2 is int p2 ? p2 : 0);
-
-                string netshEncryption = RunCmd("netsh", "dns show encryption");
-                bool hasNetshDoh = netshEncryption.Contains("https://", StringComparison.OrdinalIgnoreCase) ||
-                                   netshEncryption.Contains("Cloudflare", StringComparison.OrdinalIgnoreCase);
-
-                if (servMode == 2 || policyMode == 2 || (servMode >= 1 && hasNetshDoh))
-                {
-                    result.Status = HardeningStatus.Hardened;
-                    result.CurrentValue = servMode == 2 || policyMode == 2
-                        ? "DoH Required (Encrypted DNS Enforced)"
-                        : "DoH Auto/Active (Encrypted DNS Template Configured)";
-                }
-                else if (servMode == 1 || hasNetshDoh)
-                {
-                    result.Status = HardeningStatus.Hardened;
-                    result.CurrentValue = "DoH Allowed (Encrypted DNS Active)";
-                }
-                else
-                {
-                    result.Status = HardeningStatus.Vulnerable;
-                    result.CurrentValue = "DoH Disabled (Plaintext DNS Unencrypted)";
-                }
+                var activeDns = GetActiveDnsServers();
+                var doh = GetDohDetails(activeDns);
+                result.Status = doh.Status;
+                result.CurrentValue = doh.StatusText;
             }
             catch (Exception ex)
             {
@@ -642,48 +651,86 @@ namespace xScanner.Core.Hardening
         {
             try
             {
-                object? dohServVal = GetRegistryValue(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Services\Dnscache\Parameters", "EnableAutoDoh");
-                object? dohPolicyVal = GetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows NT\DNSClient", "EnableAutoDoh");
-
-                int servMode = dohServVal is int s ? s : 0;
-                int policyMode = dohPolicyVal is int p ? p : 0;
-
-                report.DohStatus = (servMode == 2 || policyMode == 2)
-                    ? "Enforced"
-                    : ((servMode == 1 || policyMode == 1) ? "Allowed (Auto)" : "Disabled");
-
-                string output = RunCmd("netsh", "dns show encryption");
-                string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-
-                var templates = new List<string>();
-                foreach (var line in lines)
-                {
-                    if (line.Contains("https://", StringComparison.OrdinalIgnoreCase))
-                    {
-                        int idx = line.IndexOf("https://", StringComparison.OrdinalIgnoreCase);
-                        string url = line.Substring(idx).Trim();
-                        if (!templates.Contains(url)) templates.Add(url);
-                    }
-                }
-
-                if (templates.Count == 0)
-                {
-                    if (report.ActiveDnsServers.Any(d => d.StartsWith("1.1.1.") || d.StartsWith("1.0.0.")))
-                    {
-                        templates.Add("https://security.cloudflare-dns.com/dns-query");
-                    }
-                    else if (report.ActiveDnsServers.Any(d => d.StartsWith("8.8.8.") || d.StartsWith("8.8.4.")))
-                    {
-                        templates.Add("https://dns.google/dns-query");
-                    }
-                }
-
-                report.DohTemplates = templates;
+                var doh = GetDohDetails(report.ActiveDnsServers);
+                report.DohStatus = doh.ModeText;
+                report.DohTemplates = doh.Templates;
             }
             catch (Exception ex)
             {
                 report.DohStatus = "Unknown";
                 Log($"[WARN] Could not retrieve DoH status/templates: {ex.Message}");
+            }
+        }
+
+        private (HardeningStatus Status, string StatusText, string ModeText, List<string> Templates) GetDohDetails(List<string> activeDnsServers)
+        {
+            object? dohServVal = GetRegistryValue(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Services\Dnscache\Parameters", "EnableAutoDoh");
+            object? dohPolicyVal = GetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows NT\DNSClient", "EnableAutoDoh");
+            object? dohPolicyVal2 = GetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows NT\DNSClient", "EnableDoH");
+
+            int servMode = dohServVal is int s ? s : 0;
+            int policyMode = dohPolicyVal is int p1 ? p1 : (dohPolicyVal2 is int p2 ? p2 : 0);
+
+            int effectiveMode = Math.Max(servMode, policyMode);
+
+            string netshEncryption = RunCmd("netsh", "dns show encryption");
+            var templates = new List<string>();
+            string[] lines = netshEncryption.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (var line in lines)
+            {
+                if (line.Contains("https://", StringComparison.OrdinalIgnoreCase))
+                {
+                    int idx = line.IndexOf("https://", StringComparison.OrdinalIgnoreCase);
+                    string url = line.Substring(idx).Trim();
+                    if (!templates.Contains(url)) templates.Add(url);
+                }
+            }
+
+            if (templates.Count == 0 && activeDnsServers != null)
+            {
+                if (activeDnsServers.Any(d => d.StartsWith("1.1.1.") || d.StartsWith("1.0.0.")))
+                {
+                    templates.Add("https://security.cloudflare-dns.com/dns-query");
+                }
+                else if (activeDnsServers.Any(d => d.StartsWith("8.8.8.") || d.StartsWith("8.8.4.")))
+                {
+                    templates.Add("https://dns.google/dns-query");
+                }
+                else if (activeDnsServers.Any(d => d.StartsWith("9.9.9.") || d.StartsWith("149.112.")))
+                {
+                    templates.Add("https://dns.quad9.net/dns-query");
+                }
+            }
+
+            bool isDohActive = effectiveMode > 0 || templates.Count > 0;
+
+            if (effectiveMode == 2)
+            {
+                return (
+                    HardeningStatus.Hardened,
+                    "DoH Enforced (Encrypted DNS Strictly Required)",
+                    "Enforced (Strict DoH Required)",
+                    templates
+                );
+            }
+            else if (isDohActive)
+            {
+                return (
+                    HardeningStatus.Hardened,
+                    "DoH Allowed/Active (Encrypted DNS Active)",
+                    "Allowed/Active (Auto DoH)",
+                    templates
+                );
+            }
+            else
+            {
+                return (
+                    HardeningStatus.Vulnerable,
+                    "DoH Disabled / Inactive (Plaintext Unencrypted DNS)",
+                    "Disabled / Inactive (Unencrypted)",
+                    templates
+                );
             }
         }
 

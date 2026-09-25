@@ -39,19 +39,26 @@
                         <TextBlock x:Name="TxtFailedCount" Text="Vulnerable: 0/0" FontSize="12" Foreground="#DC3545" FontWeight="SemiBold"/>
                     </StackPanel>
 
-                    <TextBlock x:Name="TxtNetworkDnsInfo" Text="Network: Scanning... | DNS: Scanning..." FontSize="11" Foreground="{DynamicResource ThemeSubTextColor}"/>
+                    <StackPanel Margin="0,2,0,0">
+                        <TextBlock x:Name="TxtNetworkProfiles" Text="Network Profiles: Scanning..." FontSize="11" Foreground="{DynamicResource ThemeSubTextColor}" Margin="0,0,0,2"/>
+                        <TextBlock x:Name="TxtActiveDns" Text="Active DNS IPs: Scanning..." FontSize="11" Foreground="{DynamicResource ThemeSubTextColor}" Margin="0,0,0,2"/>
+                        <TextBlock x:Name="TxtDohStatus" Text="Encrypted DoH: Scanning..." FontSize="11" Foreground="{DynamicResource ThemeSubTextColor}" Margin="0,0,0,2"/>
+                        <TextBlock x:Name="TxtDohTemplates" Text="DoH Templates: Scanning..." FontSize="11" Foreground="{DynamicResource ThemeSubTextColor}" TextWrapping="Wrap"/>
+                    </StackPanel>
                 </StackPanel>
 
-                <!-- Action Buttons -->
-                <StackPanel Grid.Column="2" VerticalAlignment="Center" Orientation="Vertical">
-                    <Button x:Name="BtnHarden" Content="HARDEN SYSTEM" Click="BtnHarden_Click" Width="150" Height="38" Background="#28A745" Foreground="White" FontWeight="Bold" FontSize="12" Margin="0,0,0,8" BorderThickness="0">
+                <!-- Action Buttons & DoH Selector -->
+                <StackPanel Grid.Column="2" VerticalAlignment="Center" Orientation="Vertical" Width="200">
+                    <TextBlock Text="HARDENING DOH PROVIDER:" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource ThemeMutedTextColor}" Margin="0,0,0,3"/>
+                    <ComboBox x:Name="CbDohProvider" Height="28" Margin="0,0,0,8" ToolTip="Selected DoH provider will be applied for IPv4 &amp; IPv6 with no fallback"/>
+                    <Button x:Name="BtnHarden" Content="HARDEN SYSTEM" Click="BtnHarden_Click" Height="38" Background="#28A745" Foreground="White" FontWeight="Bold" FontSize="12" Margin="0,0,0,6" BorderThickness="0">
                         <Button.Resources>
                             <Style TargetType="Border">
                                 <Setter Property="CornerRadius" Value="6"/>
                             </Style>
                         </Button.Resources>
                     </Button>
-                    <Button x:Name="BtnRefresh" Content="Refresh Audit" Click="BtnRefresh_Click" Width="150" Height="28" Background="{DynamicResource ThemeControlBackground}" Foreground="{DynamicResource ThemeTextColor}" FontSize="11" BorderBrush="{DynamicResource ThemeBorderBrush}"/>
+                    <Button x:Name="BtnRefresh" Content="Refresh Audit" Click="BtnRefresh_Click" Height="28" Background="{DynamicResource ThemeControlBackground}" Foreground="{DynamicResource ThemeTextColor}" FontSize="11" BorderBrush="{DynamicResource ThemeBorderBrush}"/>
                 </StackPanel>
             </Grid>
         </Border>

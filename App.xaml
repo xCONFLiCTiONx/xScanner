@@ -275,13 +275,15 @@
             <Setter Property="OverridesDefaultStyle" Value="True"/>
             <Setter Property="IsTabStop" Value="False"/>
             <Setter Property="Focusable" Value="False"/>
+            <Setter Property="MinHeight" Value="36"/>
+            <Setter Property="MinWidth" Value="36"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Thumb">
                         <Border x:Name="border"
                                 Background="{DynamicResource ThemeBorderBrush}"
-                                CornerRadius="4"
-                                Margin="2"/>
+                                CornerRadius="5"
+                                Margin="1"/>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="border" Property="Background" Value="{DynamicResource ThemeMutedTextColor}"/>
@@ -299,26 +301,32 @@
         <Style TargetType="ScrollBar">
             <Setter Property="SnapsToDevicePixels" Value="True"/>
             <Setter Property="OverridesDefaultStyle" Value="True"/>
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Width" Value="10"/>
-            <Setter Property="Height" Value="10"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeControlBackground}"/>
+            <Setter Property="Width" Value="14"/>
+            <Setter Property="Height" Value="14"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ScrollBar">
-                        <Grid x:Name="GridRoot" Background="{TemplateBinding Background}">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="4">
                             <Track x:Name="PART_Track" IsDirectionReversed="True" Focusable="False">
+                                <Track.DecreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.LineUpCommand}" Focusable="False" Opacity="0"/>
+                                </Track.DecreaseRepeatButton>
                                 <Track.Thumb>
                                     <Thumb Style="{StaticResource ScrollThumb}"/>
                                 </Track.Thumb>
+                                <Track.IncreaseRepeatButton>
+                                    <RepeatButton Command="{x:Static ScrollBar.LineDownCommand}" Focusable="False" Opacity="0"/>
+                                </Track.IncreaseRepeatButton>
                             </Track>
-                        </Grid>
+                        </Border>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
             <Style.Triggers>
                 <Trigger Property="Orientation" Value="Horizontal">
                     <Setter Property="Width" Value="Auto"/>
-                    <Setter Property="Height" Value="10"/>
+                    <Setter Property="Height" Value="14"/>
                 </Trigger>
             </Style.Triggers>
         </Style>

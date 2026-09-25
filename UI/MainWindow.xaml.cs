@@ -56,6 +56,19 @@ namespace xScanner.UI
             Focus();
         }
 
+        public void ShowTrayNotification(string title, string message, System.Windows.Forms.ToolTipIcon icon = System.Windows.Forms.ToolTipIcon.Info)
+        {
+            try
+            {
+                var db = new ScanDatabase();
+                bool allNotifications = bool.Parse(db.GetSetting("EnableAllNotifications", "True"));
+                if (!allNotifications) return;
+
+                _trayManager?.ShowNotification(title, message, icon);
+            }
+            catch { }
+        }
+
         public async void ExitApplication()
         {
             _isExplicitExit = true;

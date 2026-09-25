@@ -19,6 +19,79 @@ namespace xScanner.Core.Hardening
         Unknown
     }
 
+    public class DohProvider
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Ipv4Primary { get; set; } = string.Empty;
+        public string Ipv4Secondary { get; set; } = string.Empty;
+        public string Ipv6Primary { get; set; } = string.Empty;
+        public string Ipv6Secondary { get; set; } = string.Empty;
+        public string TemplateUrl { get; set; } = string.Empty;
+
+        public override string ToString() => Name;
+
+        public static List<DohProvider> GetPopularProviders()
+        {
+            return new List<DohProvider>
+            {
+                new DohProvider
+                {
+                    Name = "Cloudflare Security (1.1.1.2 - Malware Blocking)",
+                    Ipv4Primary = "1.1.1.2",
+                    Ipv4Secondary = "1.0.0.2",
+                    Ipv6Primary = "2606:4700:4700::1112",
+                    Ipv6Secondary = "2606:4700:4700::1002",
+                    TemplateUrl = "https://security.cloudflare-dns.com/dns-query"
+                },
+                new DohProvider
+                {
+                    Name = "Cloudflare Standard (1.1.1.1 - High Speed)",
+                    Ipv4Primary = "1.1.1.1",
+                    Ipv4Secondary = "1.0.0.1",
+                    Ipv6Primary = "2606:4700:4700::1111",
+                    Ipv6Secondary = "2606:4700:4700::1001",
+                    TemplateUrl = "https://cloudflare-dns.com/dns-query"
+                },
+                new DohProvider
+                {
+                    Name = "Google Public DNS (8.8.8.8)",
+                    Ipv4Primary = "8.8.8.8",
+                    Ipv4Secondary = "8.8.4.4",
+                    Ipv6Primary = "2001:4860:4860::8888",
+                    Ipv6Secondary = "2001:4860:4860::8844",
+                    TemplateUrl = "https://dns.google/dns-query"
+                },
+                new DohProvider
+                {
+                    Name = "Quad9 Security (9.9.9.9 - Threat Blocking)",
+                    Ipv4Primary = "9.9.9.9",
+                    Ipv4Secondary = "149.112.112.112",
+                    Ipv6Primary = "2620:fe::fe",
+                    Ipv6Secondary = "2620:fe::9",
+                    TemplateUrl = "https://dns.quad9.net/dns-query"
+                },
+                new DohProvider
+                {
+                    Name = "AdGuard DNS (94.140.14.14 - Ad & Tracker Block)",
+                    Ipv4Primary = "94.140.14.14",
+                    Ipv4Secondary = "94.140.15.15",
+                    Ipv6Primary = "2a10:50c0::ad1:ff",
+                    Ipv6Secondary = "2a10:50c0::ad2:ff",
+                    TemplateUrl = "https://dns.adguard-dns.com/dns-query"
+                },
+                new DohProvider
+                {
+                    Name = "Cisco Umbrella / OpenDNS (208.67.222.222)",
+                    Ipv4Primary = "208.67.222.222",
+                    Ipv4Secondary = "208.67.220.220",
+                    Ipv6Primary = "2620:119:35::35",
+                    Ipv6Secondary = "2620:119:53::53",
+                    TemplateUrl = "https://doh.opendns.com/dns-query"
+                }
+            };
+        }
+    }
+
     public class HardeningCheckResult
     {
         public string Id { get; set; } = string.Empty;
