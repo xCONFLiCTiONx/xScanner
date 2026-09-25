@@ -70,10 +70,11 @@ namespace xScanner.Core.Hardening
                 Log("[AUDIT] Scanning Active Open Listening TCP Ports...");
                 report.ListeningPorts = ScanListeningPorts();
 
-                // Network Profiles & DNS
-                Log("[AUDIT] Scanning Active IPv4 DNS Servers & Network Interfaces...");
+                // Network Profiles, DNS & DoH Templates
+                Log("[AUDIT] Scanning Active IPv4 DNS Servers, DoH Templates & Network Interfaces...");
                 report.ActiveDnsServers = GetActiveDnsServers();
                 report.NetworkProfiles = GetNetworkProfiles();
+                PopulateDohInfo(report);
 
                 // Calculate metrics
                 report.TotalChecks = report.CheckResults.Count;
@@ -635,6 +636,55 @@ namespace xScanner.Core.Hardening
             catch { }
             if (profiles.Count == 0) profiles.Add("Public Profile");
             return profiles;
+        }
+
+        private void PopulateDohInfo(HardeningAuditReport report)
+        {
+            try
+            {
+                object? dohServVal = GetRegistryValue(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Services\Dnscache\Parameters", "EnableAutoDoh");
+                object? dohPolicyVal = GetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows NT\DNSClient", "EnableAutoDoh");
+
+                int servMode = dohServVal is int s ? s : 0;
+                int policyMode = dohPolicyVal is int p ? p : 0;
+
+                report.DohStatus = (servMode == 2 || policyMode == 2)
+                    ? "Enforced"
+                    : ((servMode == 1 || policyMode == 1) ? "Allowed (Auto)" : "Disabled");
+
+                string output = RunCmd("netsh", "dns show encryption");
+                string[] lines = output.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
+                var templates = new List<string>();
+                foreach (var line in lines)
+                {
+                    if (line.Contains("https://", StringComparison.OrdinalIgnoreCase))
+                    {
+                        int idx = line.IndexOf("https://", StringComparison.OrdinalIgnoreCase);
+                        string url = line.Substring(idx).Trim();
+                        if (!templates.Contains(url)) templates.Add(url);
+                    }
+                }
+
+                if (templates.Count == 0)
+                {
+                    if (report.ActiveDnsServers.Any(d => d.StartsWith("1.1.1.") || d.StartsWith("1.0.0.")))
+                    {
+                        templates.Add("https://security.cloudflare-dns.com/dns-query");
+                    }
+                    else if (report.ActiveDnsServers.Any(d => d.StartsWith("8.8.8.") || d.StartsWith("8.8.4.")))
+                    {
+                        templates.Add("https://dns.google/dns-query");
+                    }
+                }
+
+                report.DohTemplates = templates;
+            }
+            catch (Exception ex)
+            {
+                report.DohStatus = "Unknown";
+                Log($"[WARN] Could not retrieve DoH status/templates: {ex.Message}");
+            }
         }
 
         private string GetProcessName(int pid)

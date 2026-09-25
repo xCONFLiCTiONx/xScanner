@@ -86,6 +86,8 @@ namespace xScanner.Core.Hardening
         public List<ListeningPortInfo> ListeningPorts { get; set; } = new();
         public List<string> ActiveDnsServers { get; set; } = new();
         public List<string> NetworkProfiles { get; set; } = new();
+        public string DohStatus { get; set; } = "Disabled";
+        public List<string> DohTemplates { get; set; } = new();
         public bool IsFullyHardened => FailedChecks == 0 && TotalChecks > 0;
     }
 }

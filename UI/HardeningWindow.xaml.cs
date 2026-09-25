@@ -135,7 +135,8 @@ namespace xScanner.UI
 
             string dnsStr = report.ActiveDnsServers.Count > 0 ? string.Join(", ", report.ActiveDnsServers) : "None";
             string netStr = report.NetworkProfiles.Count > 0 ? string.Join(", ", report.NetworkProfiles) : "Public";
-            TxtNetworkDnsInfo.Text = $"Profiles: {netStr} | Active DNS: {dnsStr}";
+            string dohStr = report.DohTemplates.Count > 0 ? string.Join(", ", report.DohTemplates) : "None";
+            TxtNetworkDnsInfo.Text = $"Profiles: {netStr} | Active DNS: {dnsStr} | DoH ({report.DohStatus}): {dohStr}";
 
             IcChecks.ItemsSource = null;
             IcChecks.ItemsSource = report.CheckResults;
