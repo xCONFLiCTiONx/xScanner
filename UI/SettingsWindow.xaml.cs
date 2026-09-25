@@ -56,7 +56,7 @@ namespace xScanner.UI
 
             if (installed)
             {
-                TxtClamStatus.Text = $"Status: Installed — Version {ClamAvManager.ClamVersion} (Path: {_clamManager.GetEngineDirectory()})";
+                TxtClamStatus.Text = $"Status: Installed — Version {ClamAvManager.ClamVersion}{Environment.NewLine}Path: {_clamManager.GetEngineDirectory()}";
                 TxtClamStatus.Foreground = System.Windows.Media.Brushes.Green;
                 BtnInstallClam.Content = "Reinstall / Update ClamAV";
                 BtnUpdateDefs.IsEnabled = true;
