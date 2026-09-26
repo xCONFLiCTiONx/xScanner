@@ -1,81 +1,81 @@
 <Window x:Class="xScanner.UI.HardeningWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="System Hardening &amp; Security Audit" Height="920" Width="780"
+        Title="System Hardening &amp; Security Audit" Height="680" Width="780"
         ResizeMode="CanResize" WindowStartupLocation="CenterOwner"
         Background="{DynamicResource ThemeWindowBackground}">
-    <Grid Margin="15">
+    <Grid Margin="12">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
-            <RowDefinition Height="150"/>
+            <RowDefinition Height="125"/>
         </Grid.RowDefinitions>
 
         <!-- Header Summary Card -->
-        <Border Grid.Row="0" Background="{DynamicResource ThemeCardBackground}" BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="15" Margin="0,0,0,10">
+        <Border Grid.Row="0" Background="{DynamicResource ThemeCardBackground}" BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,8">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="140"/>
+                    <ColumnDefinition Width="125"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
                 <!-- Score Badge -->
-                <Border Grid.Column="0" Background="#1A28A745" BorderBrush="#28A745" BorderThickness="2" CornerRadius="10" Padding="10" HorizontalAlignment="Center" VerticalAlignment="Center" Width="120">
+                <Border Grid.Column="0" Background="#1A28A745" BorderBrush="#28A745" BorderThickness="2" CornerRadius="8" Padding="6" HorizontalAlignment="Center" VerticalAlignment="Center" Width="110">
                     <StackPanel HorizontalAlignment="Center">
-                        <TextBlock Text="SCORE" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource ThemeMutedTextColor}" HorizontalAlignment="Center"/>
-                        <TextBlock x:Name="TxtScore" Text="0%" FontSize="32" FontWeight="Bold" Foreground="#28A745" HorizontalAlignment="Center"/>
-                        <TextBlock x:Name="TxtScoreStatus" Text="Auditing..." FontSize="10" Foreground="{DynamicResource ThemeSubTextColor}" HorizontalAlignment="Center"/>
+                        <TextBlock Text="SCORE" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource ThemeMutedTextColor}" HorizontalAlignment="Center"/>
+                        <TextBlock x:Name="TxtScore" Text="0%" FontSize="24" FontWeight="Bold" Foreground="#28A745" HorizontalAlignment="Center"/>
+                        <TextBlock x:Name="TxtScoreStatus" Text="Auditing..." FontSize="9" Foreground="{DynamicResource ThemeSubTextColor}" HorizontalAlignment="Center"/>
                     </StackPanel>
                 </Border>
 
                 <!-- Status Metrics -->
-                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="15,0">
-                    <TextBlock Text="SYSTEM HARDENING STATUS" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource ThemeMutedTextColor}" Margin="0,0,0,3"/>
-                    <TextBlock x:Name="TxtSummaryTitle" Text="Security Audit In Progress..." FontSize="18" FontWeight="Bold" Foreground="{DynamicResource ThemeTextColor}" Margin="0,0,0,5"/>
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0">
+                    <TextBlock Text="SYSTEM HARDENING STATUS" FontSize="10" FontWeight="SemiBold" Foreground="{DynamicResource ThemeMutedTextColor}" Margin="0,0,0,2"/>
+                    <TextBlock x:Name="TxtSummaryTitle" Text="Security Audit In Progress..." FontSize="15" FontWeight="Bold" Foreground="{DynamicResource ThemeTextColor}" Margin="0,0,0,3"/>
 
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                        <TextBlock x:Name="TxtPassedCount" Text="Passed: 0/0" FontSize="12" Foreground="#28A745" FontWeight="SemiBold" Margin="0,0,15,0"/>
-                        <TextBlock x:Name="TxtFailedCount" Text="Vulnerable: 0/0" FontSize="12" Foreground="#DC3545" FontWeight="SemiBold"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
+                        <TextBlock x:Name="TxtPassedCount" Text="Passed: 0/0" FontSize="11" Foreground="#28A745" FontWeight="SemiBold" Margin="0,0,10,0"/>
+                        <TextBlock x:Name="TxtFailedCount" Text="Vulnerable: 0/0" FontSize="11" Foreground="#DC3545" FontWeight="SemiBold"/>
                     </StackPanel>
 
-                    <StackPanel Margin="0,2,0,0">
-                        <TextBlock x:Name="TxtNetworkProfiles" Text="Network Profiles: Scanning..." FontSize="11" Foreground="{DynamicResource ThemeSubTextColor}" Margin="0,0,0,1"/>
-                        <TextBlock x:Name="TxtActiveDns" Text="Active DNS IPs: Scanning..." FontSize="11" Foreground="{DynamicResource ThemeSubTextColor}" Margin="0,0,0,1"/>
-                        <TextBlock x:Name="TxtDohStatus" Text="Encrypted DoH: Scanning..." FontSize="11" Foreground="{DynamicResource ThemeSubTextColor}" Margin="0,0,0,1"/>
-                        <TextBlock x:Name="TxtDohTemplates" Text="DoH Templates: Scanning..." FontSize="11" Foreground="{DynamicResource ThemeSubTextColor}" TextWrapping="Wrap"/>
+                    <StackPanel Margin="0,1,0,0">
+                        <TextBlock x:Name="TxtNetworkProfiles" Text="Network Profiles: Scanning..." FontSize="10" Foreground="{DynamicResource ThemeSubTextColor}" Margin="0,0,0,1"/>
+                        <TextBlock x:Name="TxtActiveDns" Text="Active DNS IPs: Scanning..." FontSize="10" Foreground="{DynamicResource ThemeSubTextColor}" Margin="0,0,0,1"/>
+                        <TextBlock x:Name="TxtDohStatus" Text="Encrypted DoH: Scanning..." FontSize="10" Foreground="{DynamicResource ThemeSubTextColor}" Margin="0,0,0,1"/>
+                        <TextBlock x:Name="TxtDohTemplates" Text="DoH Templates: Scanning..." FontSize="10" Foreground="{DynamicResource ThemeSubTextColor}" TextWrapping="Wrap"/>
                     </StackPanel>
                 </StackPanel>
 
                 <!-- Action Buttons & DoH Selector -->
-                <StackPanel Grid.Column="2" VerticalAlignment="Center" Orientation="Vertical" Width="200">
-                    <TextBlock Text="HARDENING DOH PROVIDER:" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource ThemeMutedTextColor}" Margin="0,0,0,3"/>
-                    <ComboBox x:Name="CbDohProvider" Height="28" Margin="0,0,0,8" ToolTip="Selected DoH provider will be applied for IPv4 &amp; IPv6 with no fallback"/>
-                    <Button x:Name="BtnHarden" Content="HARDEN SYSTEM" Click="BtnHarden_Click" Height="38" Background="#28A745" Foreground="White" FontWeight="Bold" FontSize="12" Margin="0,0,0,6" BorderThickness="0">
+                <StackPanel Grid.Column="2" VerticalAlignment="Center" Orientation="Vertical" Width="190">
+                    <TextBlock Text="HARDENING DOH PROVIDER:" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource ThemeMutedTextColor}" Margin="0,0,0,2"/>
+                    <ComboBox x:Name="CbDohProvider" Height="26" Margin="0,0,0,5" ToolTip="Selected DoH provider will be applied for IPv4 &amp; IPv6 with no fallback"/>
+                    <Button x:Name="BtnHarden" Content="HARDEN SYSTEM" Click="BtnHarden_Click" Height="32" Background="#28A745" Foreground="White" FontWeight="Bold" FontSize="11" Margin="0,0,0,4" BorderThickness="0">
                         <Button.Resources>
                             <Style TargetType="Border">
-                                <Setter Property="CornerRadius" Value="6"/>
+                                <Setter Property="CornerRadius" Value="5"/>
                             </Style>
                         </Button.Resources>
                     </Button>
-                    <Button x:Name="BtnRefresh" Content="Refresh Audit" Click="BtnRefresh_Click" Height="28" Background="{DynamicResource ThemeControlBackground}" Foreground="{DynamicResource ThemeTextColor}" FontSize="11" BorderBrush="{DynamicResource ThemeBorderBrush}"/>
+                    <Button x:Name="BtnRefresh" Content="Refresh Audit" Click="BtnRefresh_Click" Height="25" Background="{DynamicResource ThemeControlBackground}" Foreground="{DynamicResource ThemeTextColor}" FontSize="10" BorderBrush="{DynamicResource ThemeBorderBrush}"/>
                 </StackPanel>
             </Grid>
         </Border>
 
         <!-- Main Tab Area -->
-        <TabControl Grid.Row="1" Margin="0,0,0,10" Background="Transparent" BorderBrush="{DynamicResource ThemeBorderBrush}">
+        <TabControl Grid.Row="1" Margin="0,0,0,6" Background="Transparent" BorderBrush="{DynamicResource ThemeBorderBrush}">
             <!-- Tab 1: Hardening Checks -->
             <TabItem Header="Security Hardening Controls">
-                <ScrollViewer VerticalScrollBarVisibility="Disabled">
-                    <ItemsControl x:Name="IcChecks" Margin="5">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl x:Name="IcChecks" Margin="4">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border Background="{DynamicResource ThemeCardBackground}" BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="8" Margin="0,0,0,4">
+                                <Border Background="{DynamicResource ThemeCardBackground}" BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="7" Margin="0,0,0,4">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="28"/>
-                                            <ColumnDefinition Width="36"/>
+                                            <ColumnDefinition Width="34"/>
                                             <ColumnDefinition Width="*"/>
                                             <ColumnDefinition Width="Auto"/>
                                         </Grid.ColumnDefinitions>
@@ -84,23 +84,23 @@
                                         <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected, Mode=TwoWay}" VerticalAlignment="Center" HorizontalAlignment="Center" ToolTip="Select to include in security hardening &amp; audit notifications"/>
 
                                         <!-- Status Icon -->
-                                        <TextBlock Grid.Column="1" Text="{Binding StatusIcon}" FontFamily="Segoe MDL2 Assets" FontSize="20" Foreground="{Binding StatusColor}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding StatusIcon}" FontFamily="Segoe MDL2 Assets" FontSize="18" Foreground="{Binding StatusColor}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
 
                                         <!-- Details -->
-                                        <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="5,0,10,0">
+                                        <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="4,0,8,0">
                                             <StackPanel Orientation="Horizontal" Margin="0,0,0,1">
-                                                <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="12" Foreground="{DynamicResource ThemeTextColor}"/>
-                                                <Border Background="{DynamicResource ThemeControlBackground}" CornerRadius="4" Padding="5,1" Margin="8,0,0,0">
-                                                    <TextBlock Text="{Binding Category}" FontSize="10" Foreground="{DynamicResource ThemeMutedTextColor}"/>
+                                                <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="11" Foreground="{DynamicResource ThemeTextColor}"/>
+                                                <Border Background="{DynamicResource ThemeControlBackground}" CornerRadius="4" Padding="4,1" Margin="6,0,0,0">
+                                                    <TextBlock Text="{Binding Category}" FontSize="9" Foreground="{DynamicResource ThemeMutedTextColor}"/>
                                                 </Border>
                                             </StackPanel>
-                                            <TextBlock Text="{Binding Description}" FontSize="11" Foreground="{DynamicResource ThemeSubTextColor}" Margin="0,0,0,2" TextWrapping="Wrap"/>
-                                            <TextBlock Text="{Binding CurrentValue}" FontSize="11" FontWeight="SemiBold" Foreground="{Binding StatusColor}"/>
+                                            <TextBlock Text="{Binding Description}" FontSize="10" Foreground="{DynamicResource ThemeSubTextColor}" Margin="0,0,0,2" TextWrapping="Wrap"/>
+                                            <TextBlock Text="{Binding CurrentValue}" FontSize="10" FontWeight="SemiBold" Foreground="{Binding StatusColor}"/>
                                         </StackPanel>
 
                                         <!-- Status Badge -->
-                                        <Border Grid.Column="3" Background="{DynamicResource ThemeControlBackground}" BorderBrush="{Binding StatusColor}" BorderThickness="1" CornerRadius="6" Padding="8,3" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding StatusText}" FontWeight="Bold" FontSize="11" Foreground="{Binding StatusColor}"/>
+                                        <Border Grid.Column="3" Background="{DynamicResource ThemeControlBackground}" BorderBrush="{Binding StatusColor}" BorderThickness="1" CornerRadius="5" Padding="7,2" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding StatusText}" FontWeight="Bold" FontSize="10" Foreground="{Binding StatusColor}"/>
                                         </Border>
                                     </Grid>
                                 </Border>
@@ -112,28 +112,28 @@
 
             <!-- Tab 2: Listening Ports & System Details -->
             <TabItem Header="Active Open Ports &amp; Shielding">
-                <Grid Margin="5">
+                <Grid Margin="4">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <TextBlock Grid.Row="0" Text="Active Non-Loopback Listening TCP Ports:" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource ThemeTextColor}" Margin="0,5,0,8"/>
+                    <TextBlock Grid.Row="0" Text="Active Non-Loopback Listening TCP Ports:" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource ThemeTextColor}" Margin="0,4,0,6"/>
 
                     <DataGrid x:Name="DgPorts" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column"
                               Background="{DynamicResource ThemeCardBackground}" Foreground="{DynamicResource ThemeTextColor}"
                               RowBackground="{DynamicResource ThemeCardBackground}" GridLinesVisibility="Horizontal"
                               HorizontalGridLinesBrush="{DynamicResource ThemeBorderBrush}" BorderBrush="{DynamicResource ThemeBorderBrush}">
                         <DataGrid.Columns>
-                            <DataGridTextColumn Header="Port" Binding="{Binding Port}" Width="65"/>
-                            <DataGridTextColumn Header="Protocol" Binding="{Binding Protocol}" Width="65"/>
-                            <DataGridTextColumn Header="Process Name" Binding="{Binding ProcessName}" Width="150"/>
-                            <DataGridTextColumn Header="Local Address" Binding="{Binding LocalAddress}" Width="140"/>
+                            <DataGridTextColumn Header="Port" Binding="{Binding Port}" Width="60"/>
+                            <DataGridTextColumn Header="Protocol" Binding="{Binding Protocol}" Width="60"/>
+                            <DataGridTextColumn Header="Process Name" Binding="{Binding ProcessName}" Width="140"/>
+                            <DataGridTextColumn Header="Local Address" Binding="{Binding LocalAddress}" Width="130"/>
                             <DataGridTextColumn Header="Sensitive Description" Binding="{Binding SensitiveDescription}" Width="*"/>
-                            <DataGridTemplateColumn Header="Shielding Status" Width="170">
+                            <DataGridTemplateColumn Header="Shielding Status" Width="160">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
-                                        <TextBlock Text="{Binding StatusText}" Foreground="{Binding StatusColor}" FontWeight="Bold" Margin="5,0"/>
+                                        <TextBlock Text="{Binding StatusText}" Foreground="{Binding StatusColor}" FontWeight="Bold" Margin="4,0"/>
                                     </DataTemplate>
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
@@ -144,27 +144,27 @@
         </TabControl>
 
         <!-- Audit Log Terminal -->
-        <Border Grid.Row="2" Background="{DynamicResource ThemeCardBackground}" BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1" CornerRadius="8" Padding="8">
+        <Border Grid.Row="2" Background="{DynamicResource ThemeCardBackground}" BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="6">
             <Grid>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="22"/>
+                    <RowDefinition Height="20"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
                 <DockPanel Grid.Row="0" LastChildFill="False">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <TextBlock Text="&#xE756;" FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="{DynamicResource ThemeTextColor}" Margin="0,0,5,0"/>
+                        <TextBlock Text="&#xE756;" FontFamily="Segoe MDL2 Assets" FontSize="11" Foreground="{DynamicResource ThemeTextColor}" Margin="0,0,5,0"/>
                         <TextBlock Text="Audit &amp; Hardening Execution Terminal" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource ThemeTextColor}"/>
                     </StackPanel>
-                    <Button Content="Clear" Click="BtnClearTerminal_Click" DockPanel.Dock="Right" FontSize="10" Padding="6,1"/>
+                    <Button Content="Clear" Click="BtnClearTerminal_Click" DockPanel.Dock="Right" FontSize="10" Padding="5,1"/>
                 </DockPanel>
 
                 <TextBox x:Name="TxtTerminal" Grid.Row="1" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
-                         FontFamily="Consolas" FontSize="11"
+                         FontFamily="Consolas" FontSize="10"
                          Background="{DynamicResource ThemeControlBackground}"
                          Foreground="{DynamicResource ThemeTextColor}"
                          BorderBrush="{DynamicResource ThemeBorderBrush}"
-                         VerticalScrollBarVisibility="Auto" Padding="6"/>
+                         VerticalScrollBarVisibility="Auto" Padding="5"/>
             </Grid>
         </Border>
     </Grid>

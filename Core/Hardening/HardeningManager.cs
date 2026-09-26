@@ -255,13 +255,13 @@ namespace xScanner.Core.Hardening
                 {
                     if (string.IsNullOrWhiteSpace(ip)) continue;
 
+                    string removePs = $"Remove-DnsClientDohServerAddress -ServerAddress '{ip}' -ErrorAction SilentlyContinue";
+                    RunCmd("powershell", $"-NoProfile -ExecutionPolicy Bypass -Command \"{removePs}\"");
+
                     RunCmd("netsh", $"dns add encryption server={ip} dohtemplate=\"{provider.TemplateUrl}\" autoupdate=yes");
 
-                    string psCmd1 = $"Add-DnsClientDohServerAddress -ServerAddress '{ip}' -DohTemplate '{provider.TemplateUrl}' -AllowFallbackToUdp $false -AutoUpgrade $true -ErrorAction SilentlyContinue";
-                    RunCmd("powershell", $"-NoProfile -ExecutionPolicy Bypass -Command \"{psCmd1}\"");
-
-                    string psCmd2 = $"Set-DnsClientDohServerAddress -ServerAddress '{ip}' -DohTemplate '{provider.TemplateUrl}' -AllowFallbackToUdp $false -AutoUpgrade $true -ErrorAction SilentlyContinue";
-                    RunCmd("powershell", $"-NoProfile -ExecutionPolicy Bypass -Command \"{psCmd2}\"");
+                    string psCmd = $"Add-DnsClientDohServerAddress -ServerAddress '{ip}' -DohTemplate '{provider.TemplateUrl}' -AllowFallbackToUdp $false -AutoUpgrade $true -ErrorAction SilentlyContinue; Set-DnsClientDohServerAddress -ServerAddress '{ip}' -DohTemplate '{provider.TemplateUrl}' -AllowFallbackToUdp $false -AutoUpgrade $true -ErrorAction SilentlyContinue";
+                    RunCmd("powershell", $"-NoProfile -ExecutionPolicy Bypass -Command \"{psCmd}\"");
                 }
 
                 foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
@@ -270,13 +270,40 @@ namespace xScanner.Core.Hardening
                         (ni.NetworkInterfaceType == NetworkInterfaceType.Wireless80211 ||
                          ni.NetworkInterfaceType == NetworkInterfaceType.Ethernet))
                     {
-                        string alias = ni.Name;
-                        Log($"[DOH CONFIG] Applying Encrypted DNS servers to Adapter '{alias}'...");
+                        string name = ni.Name;
+                        string desc = ni.Description;
 
-                        string setDnsPs = $"Set-DnsClientServerAddress -InterfaceAlias '{alias}' -ServerAddresses ('{provider.Ipv4Primary}', '{provider.Ipv4Secondary}', '{provider.Ipv6Primary}', '{provider.Ipv6Secondary}') -ErrorAction SilentlyContinue";
-                        RunCmd("powershell", $"-NoProfile -ExecutionPolicy Bypass -Command \"{setDnsPs}\"");
+                        // Exclude virtual adapters (Hyper-V, vSwitch, WSL, VPN, TAP, VMware, VirtualBox, etc.)
+                        if (desc.Contains("Hyper-V", StringComparison.OrdinalIgnoreCase) ||
+                            desc.Contains("Virtual", StringComparison.OrdinalIgnoreCase) ||
+                            desc.Contains("vEthernet", StringComparison.OrdinalIgnoreCase) ||
+                            desc.Contains("VPN", StringComparison.OrdinalIgnoreCase) ||
+                            desc.Contains("TAP", StringComparison.OrdinalIgnoreCase) ||
+                            desc.Contains("WSL", StringComparison.OrdinalIgnoreCase) ||
+                            desc.Contains("VMware", StringComparison.OrdinalIgnoreCase) ||
+                            desc.Contains("Box", StringComparison.OrdinalIgnoreCase) ||
+                            name.Contains("vEthernet", StringComparison.OrdinalIgnoreCase) ||
+                            name.Contains("Hyper-V", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        string alias = ni.Name;
+                        Log($"[DOH CONFIG] Applying Encrypted DNS servers & DoH template '{provider.Name}' to Physical Adapter '{alias}'...");
+
+                        string setIpv4 = $"Set-DnsClientServerAddress -InterfaceAlias '{alias}' -ServerAddresses ('{provider.Ipv4Primary}', '{provider.Ipv4Secondary}') -ErrorAction SilentlyContinue";
+                        RunCmd("powershell", $"-NoProfile -ExecutionPolicy Bypass -Command \"{setIpv4}\"");
+
+                        if (!string.IsNullOrWhiteSpace(provider.Ipv6Primary))
+                        {
+                            string setIpv6 = $"Set-DnsClientServerAddress -InterfaceAlias '{alias}' -ServerAddresses ('{provider.Ipv6Primary}', '{provider.Ipv6Secondary}') -AddressFamily IPv6 -ErrorAction SilentlyContinue";
+                            RunCmd("powershell", $"-NoProfile -ExecutionPolicy Bypass -Command \"{setIpv6}\"");
+                        }
                     }
                 }
+
+                SetRegistryValue(Registry.LocalMachine, @"SYSTEM\CurrentControlSet\Services\Dnscache\Parameters", "EnableAutoDoh", 2, RegistryValueKind.DWord);
+                SetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows NT\DNSClient", "EnableAutoDoh", 2, RegistryValueKind.DWord);
             }
             catch (Exception ex)
             {
@@ -906,33 +933,40 @@ namespace xScanner.Core.Hardening
             int policyMode = dohPolicyVal is int p1 ? p1 : 0;
             int effectiveMode = Math.Max(servMode, policyMode);
 
-            string netshEncryption = RunCmd("netsh", "dns show encryption");
             var templates = new List<string>();
-            string[] lines = netshEncryption.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
-
-            foreach (var line in lines)
+            if (effectiveMode > 0)
             {
-                if (line.Contains("https://", StringComparison.OrdinalIgnoreCase))
+                try
                 {
-                    int idx = line.IndexOf("https://", StringComparison.OrdinalIgnoreCase);
-                    string url = line.Substring(idx).Trim();
-                    if (!templates.Contains(url)) templates.Add(url);
+                    string psOutput = RunCmd("powershell", "-NoProfile -Command \"Get-DnsClientDohServerAddress -ErrorAction SilentlyContinue | Select-Object ServerAddress, DohTemplate | Format-List\"");
+                    string[] lines = psOutput.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var line in lines)
+                    {
+                        if (line.Contains("DohTemplate", StringComparison.OrdinalIgnoreCase) && line.Contains("https://", StringComparison.OrdinalIgnoreCase))
+                        {
+                            int idx = line.IndexOf("https://", StringComparison.OrdinalIgnoreCase);
+                            string url = line.Substring(idx).Trim();
+                            if (!templates.Contains(url)) templates.Add(url);
+                        }
+                    }
                 }
+                catch { }
             }
 
-            bool isDohActive = effectiveMode > 0 || templates.Count > 0;
+            bool isDohEnforced = effectiveMode == 2;
+            bool hasActiveTemplates = templates.Count > 0 && effectiveMode > 0;
 
-            if (effectiveMode == 2)
+            if (isDohEnforced && hasActiveTemplates)
             {
                 return (HardeningStatus.Hardened, "DoH Enforced (Encrypted DNS Strictly Required)", "Enforced (Strict DoH Required)", templates);
             }
-            else if (isDohActive)
+            else if (hasActiveTemplates)
             {
-                return (HardeningStatus.Hardened, "DoH Allowed/Active (Encrypted DNS Active)", "Allowed/Active (Auto DoH)", templates);
+                return (HardeningStatus.Hardened, "DoH Active (Encrypted DNS Active)", "Active (Auto DoH)", templates);
             }
             else
             {
-                return (HardeningStatus.Vulnerable, "DoH Disabled / Inactive (Plaintext Unencrypted DNS)", "Disabled / Inactive (Unencrypted)", templates);
+                return (HardeningStatus.Vulnerable, "DoH Disabled / Inactive (Plaintext Unencrypted DNS)", "Disabled / Inactive (Unencrypted)", new List<string>());
             }
         }
 

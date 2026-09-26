@@ -314,6 +314,18 @@ namespace xScanner.UI
                                 LogTerminal($"[INFO] Basic Scan completed. Examined: {progress.FilesExamined}, Scanned: {progress.FilesScanned}, Threats: {progress.ThreatsDetected}");
                                 _trayManager?.UpdateStatus("Ready");
                                 System.Media.SystemSounds.Asterisk.Play();
+
+                                bool allNotifs = true;
+                                try { allNotifs = bool.Parse(_database.GetSetting("EnableAllNotifications", "True")); } catch { }
+                                if (allNotifs)
+                                {
+                                    string title = progress.ThreatsDetected > 0 ? "xScanner Threat Alert!" : "xScanner Scan Complete";
+                                    string msg = progress.ThreatsDetected > 0
+                                        ? $"Scan completed with {progress.ThreatsDetected} threat(s) detected! Scanned {progress.FilesScanned} files."
+                                        : $"Scan finished clean. Examined {progress.FilesExamined} files with zero threats found.";
+                                    var icon = progress.ThreatsDetected > 0 ? System.Windows.Forms.ToolTipIcon.Warning : System.Windows.Forms.ToolTipIcon.Info;
+                                    ShowTrayNotification(title, msg, icon);
+                                }
                             }
                         }));
                     }, token);
@@ -421,6 +433,18 @@ namespace xScanner.UI
                                 LogTerminal($"[INFO] Full Scan completed. Examined: {progress.FilesExamined}, Scanned: {progress.FilesScanned}, Threats: {progress.ThreatsDetected}");
                                 _trayManager?.UpdateStatus("Ready");
                                 System.Media.SystemSounds.Asterisk.Play();
+
+                                bool allNotifsFull = true;
+                                try { allNotifsFull = bool.Parse(_database.GetSetting("EnableAllNotifications", "True")); } catch { }
+                                if (allNotifsFull)
+                                {
+                                    string title = progress.ThreatsDetected > 0 ? "xScanner Threat Alert!" : "xScanner Full Scan Complete";
+                                    string msg = progress.ThreatsDetected > 0
+                                        ? $"Full scan completed with {progress.ThreatsDetected} threat(s) detected! Scanned {progress.FilesScanned} files."
+                                        : $"Full scan finished clean. Examined {progress.FilesExamined} files with zero threats found.";
+                                    var icon = progress.ThreatsDetected > 0 ? System.Windows.Forms.ToolTipIcon.Warning : System.Windows.Forms.ToolTipIcon.Info;
+                                    ShowTrayNotification(title, msg, icon);
+                                }
                             }
                         }));
                     }, token);
@@ -473,9 +497,9 @@ namespace xScanner.UI
                 return;
             }
 
-            if (!_isExplicitExit)
+            // If currently scanning and NOT explicit exit from tray menu, minimize/hide to system tray
+            if (_isScanning && !_isExplicitExit)
             {
-                // User clicked 'X' on window: minimize/hide to System Tray
                 e.Cancel = true;
                 Hide();
 
@@ -484,13 +508,14 @@ namespace xScanner.UI
                     _hasShownTrayTip = true;
                     _trayManager?.ShowNotification(
                         "xScanner System Tray",
-                        "xScanner is running in the system tray. Right-click the icon to open or exit.",
+                        "xScanner is running in the system tray while a scan is in progress. Right-click the icon to open or exit.",
                         System.Windows.Forms.ToolTipIcon.Info
                     );
                 }
                 return;
             }
 
+            // Otherwise (not scanning, or explicit exit), close/exit program completely
             e.Cancel = true;
 
             if (_isShutdownInProgress)

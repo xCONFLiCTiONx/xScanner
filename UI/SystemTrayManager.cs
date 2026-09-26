@@ -75,6 +75,7 @@ namespace xScanner.UI
 
             _notifyIcon.ContextMenuStrip = contextMenu;
             _notifyIcon.DoubleClick += (s, e) => _onOpenRequested?.Invoke();
+            _notifyIcon.BalloonTipClicked += (s, e) => _onOpenRequested?.Invoke();
         }
 
         public void UpdateStatus(string statusText)

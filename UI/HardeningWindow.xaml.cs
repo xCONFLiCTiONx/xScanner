@@ -71,6 +71,7 @@ namespace xScanner.UI
             {
                 var report = await _manager.ApplyHardeningAndVerifyAsync(selectedProvider, selectedChecks);
                 UpdateUiFromReport(report);
+                SendHardeningCompleteNotification(report);
 
                 if (report.IsFullyHardened)
                 {
@@ -177,6 +178,31 @@ namespace xScanner.UI
                     {
                         mainWin.ShowTrayNotification(title, message, System.Windows.Forms.ToolTipIcon.Warning);
                     }
+                }
+            }
+            catch { }
+        }
+
+        private void SendHardeningCompleteNotification(HardeningAuditReport report)
+        {
+            try
+            {
+                var db = new ScanDatabase();
+                bool allNotifications = bool.Parse(db.GetSetting("EnableAllNotifications", "True"));
+                bool hardeningAlerts = bool.Parse(db.GetSetting("EnableHardeningAlerts", "True"));
+
+                if (!allNotifications || !hardeningAlerts) return;
+
+                string title = report.IsFullyHardened ? "xScanner Hardening Complete" : "xScanner Hardening Status";
+                string message = report.IsFullyHardened
+                    ? $"System security hardening completed successfully!\nScore: {report.ScorePercentage}% ({report.PassedChecks}/{report.TotalChecks} controls verified)."
+                    : $"Hardening pass finished.\nVerified {report.PassedChecks} of {report.TotalChecks} controls ({report.ScorePercentage}% score). Click to review.";
+
+                var icon = report.IsFullyHardened ? System.Windows.Forms.ToolTipIcon.Info : System.Windows.Forms.ToolTipIcon.Warning;
+
+                if (System.Windows.Application.Current.MainWindow is MainWindow mainWin)
+                {
+                    mainWin.ShowTrayNotification(title, message, icon);
                 }
             }
             catch { }
