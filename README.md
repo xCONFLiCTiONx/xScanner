@@ -10,12 +10,6 @@
 
 Thanks to SQLite smart caching, subsequent full scans process hundreds of thousands of files with incredible speed:
 
-```mermaid
-pie title Full Scan File Distribution (772,524 Total Files)
-    "Skipped (Cached / Unchanged)" : 770218
-    "Scanned & Analyzed" : 2306
-```
-
 - **Scan Duration (After Initial Full Scan):** **5 minutes, 57 seconds** (examining 772,524 files)
 - **Total Full Scan Duration (Inc. Enumeration):** **8 minutes, 36 seconds**
 - **Files Skipped via Cache:** 770,218 files
