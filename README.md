@@ -6,6 +6,23 @@
 
 ---
 
+## ⚡ Performance (After Initial Full Scan)
+
+Thanks to SQLite smart caching, subsequent full scans process hundreds of thousands of files with incredible speed:
+
+```mermaid
+pie title Full Scan File Distribution (772,524 Total Files)
+    "Skipped (Cached / Unchanged)" : 770218
+    "Scanned & Analyzed" : 2306
+```
+
+- **Scan Duration (After Initial Full Scan):** **5 minutes, 57 seconds** (examining 772,524 files)
+- **Total Full Scan Duration (Inc. Enumeration):** **8 minutes, 36 seconds**
+- **Files Skipped via Cache:** 770,218 files
+- **Files Actively Scanned:** 2,306 files
+
+---
+
 ## Key Features
 
 - **ClamAV Integration**: Uses ClamAV (`clamscan` / `freshclam`) as its core malware detection engine with automatic definition updates.
@@ -31,6 +48,15 @@ Covers high-risk persistence and malware locations automatically:
 ### 2. Full Scan
 - Searches all accessible local fixed drives.
 - Supports recursive directory exclusions configured via settings (e.g., `C:\Games\`, `D:\VirtualMachines\`).
+
+---
+
+## Performance & Benchmarks
+
+xScanner delivers exceptional scanning performance and efficiency:
+- **File Enumeration:** 772,524 files enumerated across fixed drives in **2 minutes, 39 seconds**.
+- **File Scanning & Analysis:** 2,306 files scanned using ClamAV definitions and smart caching in **5 minutes, 57 seconds**.
+- **Total Full Scan Duration:** **8 minutes, 36 seconds**.
 
 ---
 
