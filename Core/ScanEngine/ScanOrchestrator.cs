@@ -7,6 +7,7 @@ using xScanner.Analysis;
 using xScanner.Core.FileSystem;
 using xScanner.Core.ScanCache;
 using xScanner.Core.ScanEscalation;
+using xScanner.Core.ScanEngine.Scanners;
 using xScanner.Database;
 using xScanner.Database.Models;
 using xScanner.Engines.ClamAV;
@@ -26,6 +27,7 @@ namespace xScanner.Core.ScanEngine
         public string LogMessage { get; set; } = string.Empty;
         public bool IsIndeterminate { get; set; } = true;
         public long TotalFiles { get; set; }
+        public List<ScanFinding> Findings { get; set; } = new();
     }
 
     public class ScanOrchestrator
@@ -35,6 +37,7 @@ namespace xScanner.Core.ScanEngine
         private readonly ScanCacheManager _cacheManager;
         private readonly EscalationManager _escalationManager;
         private readonly QuarantineManager _quarantineManager;
+        private readonly List<IScanProvider> _providers;
 
         public ScanOrchestrator(ScanDatabase database, ClamAvManager clamManager)
         {
@@ -43,6 +46,22 @@ namespace xScanner.Core.ScanEngine
             _cacheManager = new ScanCacheManager(database);
             _escalationManager = new EscalationManager(database, clamManager);
             _quarantineManager = new QuarantineManager(database);
+
+            // Register modular providers
+            _providers = new List<IScanProvider>
+            {
+                new ProcessScanner(),
+                new StartupPersistenceScanner(),
+                new ServiceAndDriverScanner(),
+                new TaskAndWmiScanner(),
+                new SystemConfigScanner(),
+                new ActiveNetworkAndBinScanner(),
+                new FullFilesystemScanner(),
+                new NtfsForensicsScanner(),
+                new AdvancedRegistryExtensibilityScanner(),
+                new ForensicArtifactsScanner(),
+                new AdvancedSecurityAndMemoryScanner()
+            };
         }
 
         public async Task RunBasicScanAsync(List<string>? exclusions, Action<ScanProgressEventArgs> onProgress, CancellationToken cancellationToken = default)
@@ -53,7 +72,12 @@ namespace xScanner.Core.ScanEngine
             var fileList = new List<string>(files);
             if (cancellationToken.IsCancellationRequested) return;
             onProgress?.Invoke(new ScanProgressEventArgs { CurrentFile = $"Found {fileList.Count} files to scan.", LogMessage = $"[INFO] Basic scan enumeration complete. Found {fileList.Count} files.", IsIndeterminate = false, TotalFiles = fileList.Count });
-            await RunScanInternalAsync("Basic", fileList, onProgress, cancellationToken);
+
+            // Run modular providers for Basic
+            var context = new ScanResultContext("Basic", cancellationToken);
+            await RunProvidersAsync(ScanScope.Basic, context, onProgress, cancellationToken);
+
+            await RunScanInternalAsync("Basic", fileList, context, onProgress, cancellationToken);
         }
 
         public async Task RunBasicScanAsync(Action<ScanProgressEventArgs> onProgress, CancellationToken cancellationToken = default)
@@ -68,25 +92,85 @@ namespace xScanner.Core.ScanEngine
             var fileList = new List<string>(files);
             if (cancellationToken.IsCancellationRequested) return;
             onProgress?.Invoke(new ScanProgressEventArgs { CurrentFile = $"Found {fileList.Count} files to scan.", LogMessage = $"[INFO] Full scan enumeration complete. Found {fileList.Count} files across fixed drives.", IsIndeterminate = false, TotalFiles = fileList.Count });
-            await RunScanInternalAsync("Full", fileList, onProgress, cancellationToken);
+
+            // Run modular providers for Full (Basic + Full scopes)
+            var context = new ScanResultContext("Full", cancellationToken);
+            await RunProvidersAsync(ScanScope.Both, context, onProgress, cancellationToken);
+
+            await RunScanInternalAsync("Full", fileList, context, onProgress, cancellationToken);
         }
 
-        private async Task RunScanInternalAsync(string scanType, List<string> filePaths, Action<ScanProgressEventArgs>? onProgress, CancellationToken cancellationToken = default)
+        private async Task RunProvidersAsync(ScanScope targetScope, ScanResultContext context, Action<ScanProgressEventArgs>? onProgress, CancellationToken cancellationToken)
+        {
+            foreach (var provider in _providers)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                bool shouldRun = provider.Scope == ScanScope.Both ||
+                                 provider.Scope == targetScope ||
+                                 (targetScope == ScanScope.Both && (provider.Scope == ScanScope.Basic || provider.Scope == ScanScope.Full));
+
+                if (!shouldRun) continue;
+
+                context.RegisterProvider(provider.Id, provider.DisplayName);
+                onProgress?.Invoke(new ScanProgressEventArgs
+                {
+                    CurrentFile = $"Running {provider.DisplayName}...",
+                    LogMessage = $"[INFO] Starting provider: {provider.DisplayName}",
+                    IsIndeterminate = true
+                });
+
+                try
+                {
+                    await provider.ScanAsync(context, cancellationToken);
+                    foreach (var finding in context.Findings)
+                    {
+                        if (finding.ProviderId == provider.Id)
+                        {
+                            onProgress?.Invoke(new ScanProgressEventArgs
+                            {
+                                CurrentFile = finding.Title,
+                                LogMessage = $"[FINDING] [{finding.Severity}] {finding.Title}: {finding.Description}",
+                                IsIndeterminate = true,
+                                Findings = new List<ScanFinding> { finding }
+                            });
+                        }
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    context.SetProviderStatus(provider.Id, ProviderExecutionStatus.Cancelled, "Scan cancelled.");
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    context.SetProviderStatus(provider.Id, ProviderExecutionStatus.Failed, ex.Message);
+                    context.AddError($"Provider {provider.Id} failed: {ex.Message}");
+                    onProgress?.Invoke(new ScanProgressEventArgs
+                    {
+                        LogMessage = $"[WARNING] Provider {provider.DisplayName} encountered an error: {ex.Message}",
+                        IsIndeterminate = true
+                    });
+                }
+            }
+        }
+
+        private async Task RunScanInternalAsync(string scanType, List<string> filePaths, ScanResultContext resultContext, Action<ScanProgressEventArgs>? onProgress, CancellationToken cancellationToken = default)
         {
             var startTime = DateTime.Now;
             string defVersion = _clamManager.GetDefinitionVersion();
 
-            long examined = 0;
-            long scanned = 0;
-            long skipped = 0;
-            long threats = 0;
-            long suspicious = 0;
+            long examined = resultContext.FilesExamined;
+            long scanned = resultContext.FilesScanned;
+            long skipped = resultContext.FilesSkipped;
+            long threats = resultContext.ThreatsDetected;
+            long suspicious = resultContext.SuspiciousFiles;
             long totalCount = filePaths.Count;
 
             onProgress?.Invoke(new ScanProgressEventArgs
             {
-                CurrentFile = $"Starting {scanType} scan...",
-                LogMessage = $"[INFO] Beginning scan of {totalCount} files using ClamAV definitions v{defVersion}...",
+                CurrentFile = $"Starting {scanType} file scan...",
+                LogMessage = $"[INFO] Beginning file scan of {totalCount} files using ClamAV definitions v{defVersion}...",
                 IsIndeterminate = false,
                 TotalFiles = totalCount
             });
@@ -212,7 +296,6 @@ namespace xScanner.Core.ScanEngine
                     skipped++;
                 }
 
-                // Throttle progress updates to every 50 files, or when threat/suspicious found, or first file
                 if (examined == 1 || examined % 50 == 0 || isThreatOrSuspicious || examined == totalCount)
                 {
                     onProgress?.Invoke(new ScanProgressEventArgs
@@ -230,7 +313,6 @@ namespace xScanner.Core.ScanEngine
                 }
             }
 
-            // Record scan history
             _database.InsertScanRecord(new ScanRecord
             {
                 StartTime = startTime,

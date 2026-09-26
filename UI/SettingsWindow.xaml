@@ -51,7 +51,7 @@
                 <Button x:Name="BtnScheduleTask" Content="Create Scheduled Scan (1 AM, Wake PC)" Click="BtnScheduleTask_Click" Width="260" Height="28" Margin="0,0,10,0" Background="#007ACC" Foreground="White" FontWeight="Bold"/>
                 <TextBlock x:Name="TxtTaskStatus" Text="Status: Checking..." VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource ThemeSubTextColor}"/>
             </StackPanel>
-            <TextBlock Text="Runs once a week at 1:00 AM with highest privileges, wakes PC if asleep, and auto-closes when complete." FontSize="11" Foreground="{DynamicResource ThemeSubTextColor}" Margin="0,0,0,8"/>
+            <TextBlock Text="Runs once a week at 1:00 AM." FontSize="11" Foreground="{DynamicResource ThemeSubTextColor}" Margin="0,0,0,8"/>
 
             <Separator Margin="0,2,0,8"/>
 
