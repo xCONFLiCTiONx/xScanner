@@ -135,7 +135,6 @@ namespace xScanner.Core.ScanEngine
                 {
                     await provider.ScanAsync(context, cancellationToken);
 
-                    // Retrieve status message set by provider completion
                     if (context.ProviderStatuses.TryGetValue(provider.Id, out var statusInfo))
                     {
                         if (!string.IsNullOrEmpty(statusInfo.StatusMessage))
@@ -191,19 +190,20 @@ namespace xScanner.Core.ScanEngine
             var startTime = DateTime.Now;
             string defVersion = _clamManager.GetDefinitionVersion();
 
-            long examined = resultContext.FilesExamined;
+            long providerExamined = resultContext.FilesExamined;
+            long candidateCount = filePaths.Count;
+            long examined = providerExamined + candidateCount;
             long scanned = resultContext.FilesScanned;
             long skipped = resultContext.FilesSkipped;
             long threats = resultContext.ThreatsDetected;
             long suspicious = resultContext.SuspiciousFiles;
-            long totalCount = filePaths.Count;
 
             onProgress?.Invoke(new ScanProgressEventArgs
             {
                 CurrentFile = $"Starting {scanType} file scan...",
-                LogMessage = $"[INFO] Beginning ClamAV file scan of {totalCount} candidates using definitions v{defVersion}...",
+                LogMessage = $"[INFO] Beginning ClamAV file scan of {candidateCount} candidates (plus {providerExamined} provider inputs, total examined: {examined}) using definitions v{defVersion}...",
                 IsIndeterminate = false,
-                TotalFiles = totalCount
+                TotalFiles = candidateCount
             });
 
             foreach (var file in filePaths)
@@ -238,7 +238,6 @@ namespace xScanner.Core.ScanEngine
                     return;
                 }
 
-                examined++;
                 bool isThreatOrSuspicious = false;
                 string logMsg = string.Empty;
 
@@ -320,22 +319,6 @@ namespace xScanner.Core.ScanEngine
                 {
                     skipped++;
                 }
-
-                if (examined == 1 || examined % 50 == 0 || isThreatOrSuspicious || examined == totalCount)
-                {
-                    onProgress?.Invoke(new ScanProgressEventArgs
-                    {
-                        CurrentFile = file,
-                        FilesExamined = examined,
-                        FilesScanned = scanned,
-                        FilesSkipped = skipped,
-                        ThreatsDetected = threats,
-                        SuspiciousFiles = suspicious,
-                        LogMessage = logMsg,
-                        IsIndeterminate = false,
-                        TotalFiles = totalCount
-                    });
-                }
             }
 
             _database.InsertScanRecord(new ScanRecord
@@ -360,7 +343,14 @@ namespace xScanner.Core.ScanEngine
                 ThreatsDetected = threats,
                 SuspiciousFiles = suspicious,
                 IsCompleted = true,
-                LogMessage = $"[INFO] {scanType} scan finished. Candidate enumeration: {totalCount}, Examined: {examined}, Scanned by ClamAV: {scanned}, Skipped/Cached: {skipped}, Threats: {threats}, Suspicious PE: {suspicious}"
+                LogMessage = $"[INFO] {scanType} scan finished.\n" +
+                             $"Candidate enumeration: {candidateCount}\n" +
+                             $"Additional scan inputs from providers: {providerExamined}\n" +
+                             $"Total examined: {examined}\n" +
+                             $"Scanned by ClamAV: {scanned}\n" +
+                             $"Skipped/Cached: {skipped}\n" +
+                             $"Threats: {threats}\n" +
+                             $"Suspicious PE: {suspicious}"
             });
         }
     }
