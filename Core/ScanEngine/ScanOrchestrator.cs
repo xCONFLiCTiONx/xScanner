@@ -192,18 +192,19 @@ namespace xScanner.Core.ScanEngine
 
             long providerExamined = resultContext.FilesExamined;
             long candidateCount = filePaths.Count;
-            long examined = providerExamined + candidateCount;
+            long examined = providerExamined;
             long scanned = resultContext.FilesScanned;
             long skipped = resultContext.FilesSkipped;
             long threats = resultContext.ThreatsDetected;
             long suspicious = resultContext.SuspiciousFiles;
+            long totalFiles = candidateCount + providerExamined;
 
             onProgress?.Invoke(new ScanProgressEventArgs
             {
                 CurrentFile = $"Starting {scanType} file scan...",
-                LogMessage = $"[INFO] Beginning ClamAV file scan of {candidateCount} candidates (plus {providerExamined} provider inputs, total examined: {examined}) using definitions v{defVersion}...",
+                LogMessage = $"[INFO] Beginning ClamAV file scan of {candidateCount} candidates (plus {providerExamined} provider inputs, total to examine: {totalFiles}) using definitions v{defVersion}...",
                 IsIndeterminate = false,
-                TotalFiles = candidateCount
+                TotalFiles = totalFiles
             });
 
             foreach (var file in filePaths)
@@ -238,7 +239,7 @@ namespace xScanner.Core.ScanEngine
                     return;
                 }
 
-                bool isThreatOrSuspicious = false;
+                examined++;
                 string logMsg = string.Empty;
 
                 if (_cacheManager.ShouldScanFile(file, defVersion, out var existingRecord))
@@ -280,7 +281,6 @@ namespace xScanner.Core.ScanEngine
                     if (clamRes.IsThreat)
                     {
                         threats++;
-                        isThreatOrSuspicious = true;
                         scanResult = "Threat";
                         logMsg = $"[THREAT] Threat detected: {clamRes.ThreatName} in {file}";
                         _database.InsertDetection(new DetectionRecord
@@ -297,7 +297,6 @@ namespace xScanner.Core.ScanEngine
                     else if (isPeSuspicious && peResult != null)
                     {
                         scanResult = "Suspicious";
-                        isThreatOrSuspicious = true;
                         string indicatorsSummary = string.Join("; ", peResult.Indicators);
                         logMsg = $"[SUSPICIOUS PE] Path: {file} | Reason: {indicatorsSummary} | Architecture: {peResult.Architecture} | Signed: {peResult.HasDigitalSignature} ({peResult.SignerName}) | SHA-256: {sha256} | Entropy: {peResult.MaxEntropy:F2} | Sections: {peResult.Sections.Count}";
 
@@ -326,7 +325,7 @@ namespace xScanner.Core.ScanEngine
                     skipped++;
                 }
 
-                if (!string.IsNullOrEmpty(logMsg))
+                if (!string.IsNullOrEmpty(logMsg) || examined == 1 || examined % 250 == 0 || examined == totalFiles)
                 {
                     onProgress?.Invoke(new ScanProgressEventArgs
                     {
@@ -338,7 +337,7 @@ namespace xScanner.Core.ScanEngine
                         SuspiciousFiles = suspicious,
                         LogMessage = logMsg,
                         IsIndeterminate = false,
-                        TotalFiles = candidateCount
+                        TotalFiles = totalFiles
                     });
                 }
             }
