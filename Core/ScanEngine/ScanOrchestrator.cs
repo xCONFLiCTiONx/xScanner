@@ -258,6 +258,7 @@ namespace xScanner.Core.ScanEngine
                     catch { }
 
                     bool isPeSuspicious = false;
+                    PEAnalysisResult? peResult = null;
                     string ext = Path.GetExtension(file);
                     if (ext.Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
                         ext.Equals(".dll", StringComparison.OrdinalIgnoreCase) ||
@@ -265,9 +266,12 @@ namespace xScanner.Core.ScanEngine
                         ext.Equals(".scr", StringComparison.OrdinalIgnoreCase) ||
                         ext.Equals(".com", StringComparison.OrdinalIgnoreCase))
                     {
-                        var peResult = PEAnalyzer.Analyze(file);
+                        peResult = PEAnalyzer.Analyze(file);
                         isPeSuspicious = peResult.IsSuspicious;
-                        if (isPeSuspicious) suspicious++;
+                        if (isPeSuspicious)
+                        {
+                            suspicious++;
+                        }
                     }
 
                     var clamRes = await _clamManager.ScanFileAsync(file, cancellationToken);
@@ -290,11 +294,13 @@ namespace xScanner.Core.ScanEngine
                         _quarantineManager.QuarantineFile(file, clamRes.ThreatName);
                         await _escalationManager.InvestigateAsync(file, clamRes.ThreatName);
                     }
-                    else if (isPeSuspicious)
+                    else if (isPeSuspicious && peResult != null)
                     {
                         scanResult = "Suspicious";
                         isThreatOrSuspicious = true;
-                        logMsg = $"[SUSPICIOUS] Suspicious PE pattern detected in {file}";
+                        string indicatorsSummary = string.Join("; ", peResult.Indicators);
+                        logMsg = $"[SUSPICIOUS PE] Path: {file} | Reason: {indicatorsSummary} | Architecture: {peResult.Architecture} | Signed: {peResult.HasDigitalSignature} ({peResult.SignerName}) | SHA-256: {sha256} | Entropy: {peResult.MaxEntropy:F2} | Sections: {peResult.Sections.Count}";
+
                         _database.InsertDetection(new DetectionRecord
                         {
                             FilePath = file,
@@ -318,6 +324,22 @@ namespace xScanner.Core.ScanEngine
                 else
                 {
                     skipped++;
+                }
+
+                if (!string.IsNullOrEmpty(logMsg))
+                {
+                    onProgress?.Invoke(new ScanProgressEventArgs
+                    {
+                        CurrentFile = file,
+                        FilesExamined = examined,
+                        FilesScanned = scanned,
+                        FilesSkipped = skipped,
+                        ThreatsDetected = threats,
+                        SuspiciousFiles = suspicious,
+                        LogMessage = logMsg,
+                        IsIndeterminate = false,
+                        TotalFiles = candidateCount
+                    });
                 }
             }
 
