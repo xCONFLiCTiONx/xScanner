@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Management;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -14,19 +15,52 @@ namespace xScanner.Core.ScanEngine.Scanners
 
         public async Task ScanAsync(ScanResultContext context, CancellationToken cancellationToken)
         {
-            context.SetProviderStatus(Id, ProviderExecutionStatus.Running, "Scanning scheduled tasks and WMI persistence...");
+            context.SetProviderStatus(Id, ProviderExecutionStatus.Running, "Scanning scheduled tasks and WMI permanent event subscriptions...");
             var sw = Stopwatch.StartNew();
             int tasksEnumerated = 0;
             int systemTasksFiltered = 0;
             int suspiciousTasksFound = 0;
+            int wmiFiltersExamined = 0;
+            int wmiConsumersExamined = 0;
+            int wmiBindingsExamined = 0;
             int accessDeniedCount = 0;
 
             try
             {
+                // 1. Scheduled Tasks
                 string tasksDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "Tasks");
                 if (Directory.Exists(tasksDir))
                 {
                     ScanTaskFolder(tasksDir, tasksDir, context, cancellationToken, ref tasksEnumerated, ref systemTasksFiltered, ref suspiciousTasksFound, ref accessDeniedCount);
+                }
+
+                // 2. WMI Permanent Event Subscriptions
+                try
+                {
+                    var options = new ConnectionOptions();
+                    var scopePath = @"\\.\root\subscription";
+                    using var searcherFilter = new ManagementObjectSearcher(scopePath, "SELECT * FROM __EventFilter");
+                    foreach (var obj in searcherFilter.Get())
+                    {
+                        wmiFiltersExamined++;
+                    }
+
+                    using var searcherConsumer = new ManagementObjectSearcher(scopePath, "SELECT * FROM __EventConsumer");
+                    foreach (var obj in searcherConsumer.Get())
+                    {
+                        wmiConsumersExamined++;
+                    }
+
+                    using var searcherBinding = new ManagementObjectSearcher(scopePath, "SELECT * FROM __FilterToConsumerBinding");
+                    foreach (var obj in searcherBinding.Get())
+                    {
+                        wmiBindingsExamined++;
+                    }
+                }
+                catch
+                {
+                    // WMI query access denied or namespace unavailable
+                    accessDeniedCount++;
                 }
 
                 sw.Stop();
@@ -34,6 +68,9 @@ namespace xScanner.Core.ScanEngine.Scanners
                     $"Provider completed: {DisplayName}\n" +
                     $"Tasks enumerated: {tasksEnumerated}\n" +
                     $"System tasks filtered: {systemTasksFiltered}\n" +
+                    $"WMI filters examined: {wmiFiltersExamined}\n" +
+                    $"WMI consumers examined: {wmiConsumersExamined}\n" +
+                    $"WMI bindings examined: {wmiBindingsExamined}\n" +
                     $"Access denied: {accessDeniedCount}\n" +
                     $"Suspicious tasks found: {suspiciousTasksFound}\n" +
                     $"Duration: {sw.ElapsedMilliseconds / 1000.0:F1}s");
@@ -62,7 +99,6 @@ namespace xScanner.Core.ScanEngine.Scanners
                     {
                         string taskName = file.Substring(rootDir.Length).TrimStart(Path.DirectorySeparatorChar);
 
-                        // Filter out standard Windows / Microsoft system tasks unless verified anomalous
                         if (taskName.StartsWith("Microsoft\\Windows\\", StringComparison.OrdinalIgnoreCase) ||
                             taskName.Equals("Windows App Updater", StringComparison.OrdinalIgnoreCase))
                         {
