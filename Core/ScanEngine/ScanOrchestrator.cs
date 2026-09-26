@@ -47,7 +47,6 @@ namespace xScanner.Core.ScanEngine
             _escalationManager = new EscalationManager(database, clamManager);
             _quarantineManager = new QuarantineManager(database);
 
-            // Register modular providers
             _providers = new List<IScanProvider>
             {
                 new ProcessScanner(),
@@ -71,9 +70,15 @@ namespace xScanner.Core.ScanEngine
             var files = await Task.Run(() => FileEnumerator.GetBasicScanFiles(exclusions, cancellationToken), cancellationToken);
             var fileList = new List<string>(files);
             if (cancellationToken.IsCancellationRequested) return;
-            onProgress?.Invoke(new ScanProgressEventArgs { CurrentFile = $"Found {fileList.Count} files to scan.", LogMessage = $"[INFO] Basic scan enumeration complete. Found {fileList.Count} files.", IsIndeterminate = false, TotalFiles = fileList.Count });
 
-            // Run modular providers for Basic
+            onProgress?.Invoke(new ScanProgressEventArgs
+            {
+                CurrentFile = $"Found {fileList.Count} files to scan.",
+                LogMessage = $"[INFO] Basic candidate enumeration: {fileList.Count} files found.",
+                IsIndeterminate = false,
+                TotalFiles = fileList.Count
+            });
+
             var context = new ScanResultContext("Basic", cancellationToken);
             await RunProvidersAsync(ScanScope.Basic, context, onProgress, cancellationToken);
 
@@ -91,9 +96,15 @@ namespace xScanner.Core.ScanEngine
             var files = await Task.Run(() => FileEnumerator.GetFullScanFiles(exclusions, cancellationToken), cancellationToken);
             var fileList = new List<string>(files);
             if (cancellationToken.IsCancellationRequested) return;
-            onProgress?.Invoke(new ScanProgressEventArgs { CurrentFile = $"Found {fileList.Count} files to scan.", LogMessage = $"[INFO] Full scan enumeration complete. Found {fileList.Count} files across fixed drives.", IsIndeterminate = false, TotalFiles = fileList.Count });
 
-            // Run modular providers for Full (Basic + Full scopes)
+            onProgress?.Invoke(new ScanProgressEventArgs
+            {
+                CurrentFile = $"Found {fileList.Count} files to scan.",
+                LogMessage = $"[INFO] Full candidate enumeration: {fileList.Count} files found across fixed drives.",
+                IsIndeterminate = false,
+                TotalFiles = fileList.Count
+            });
+
             var context = new ScanResultContext("Full", cancellationToken);
             await RunProvidersAsync(ScanScope.Both, context, onProgress, cancellationToken);
 
@@ -123,6 +134,26 @@ namespace xScanner.Core.ScanEngine
                 try
                 {
                     await provider.ScanAsync(context, cancellationToken);
+
+                    // Retrieve status message set by provider completion
+                    if (context.ProviderStatuses.TryGetValue(provider.Id, out var statusInfo))
+                    {
+                        if (!string.IsNullOrEmpty(statusInfo.StatusMessage))
+                        {
+                            foreach (var line in statusInfo.StatusMessage.Split('\n'))
+                            {
+                                if (!string.IsNullOrWhiteSpace(line))
+                                {
+                                    onProgress?.Invoke(new ScanProgressEventArgs
+                                    {
+                                        LogMessage = $"[COMPLETED] {line.Trim()}",
+                                        IsIndeterminate = true
+                                    });
+                                }
+                            }
+                        }
+                    }
+
                     foreach (var finding in context.Findings)
                     {
                         if (finding.ProviderId == provider.Id)
@@ -170,7 +201,7 @@ namespace xScanner.Core.ScanEngine
             onProgress?.Invoke(new ScanProgressEventArgs
             {
                 CurrentFile = $"Starting {scanType} file scan...",
-                LogMessage = $"[INFO] Beginning file scan of {totalCount} files using ClamAV definitions v{defVersion}...",
+                LogMessage = $"[INFO] Beginning ClamAV file scan of {totalCount} candidates using definitions v{defVersion}...",
                 IsIndeterminate = false,
                 TotalFiles = totalCount
             });
@@ -227,7 +258,6 @@ namespace xScanner.Core.ScanEngine
                     }
                     catch { }
 
-                    // Static analysis for PE files
                     bool isPeSuspicious = false;
                     string ext = Path.GetExtension(file);
                     if (ext.Equals(".exe", StringComparison.OrdinalIgnoreCase) ||
@@ -241,7 +271,6 @@ namespace xScanner.Core.ScanEngine
                         if (isPeSuspicious) suspicious++;
                     }
 
-                    // ClamAV scan
                     var clamRes = await _clamManager.ScanFileAsync(file, cancellationToken);
 
                     string scanResult = "Clean";
@@ -259,10 +288,7 @@ namespace xScanner.Core.ScanEngine
                             ActionTaken = "Quarantined"
                         });
 
-                        // Quarantine threat safely
                         _quarantineManager.QuarantineFile(file, clamRes.ThreatName);
-
-                        // Escalate investigation
                         await _escalationManager.InvestigateAsync(file, clamRes.ThreatName);
                     }
                     else if (isPeSuspicious)
@@ -279,7 +305,6 @@ namespace xScanner.Core.ScanEngine
                         });
                     }
 
-                    // Update cache
                     _database.UpsertFileRecord(new FileRecord
                     {
                         FilePath = file,
@@ -334,7 +359,8 @@ namespace xScanner.Core.ScanEngine
                 FilesSkipped = skipped,
                 ThreatsDetected = threats,
                 SuspiciousFiles = suspicious,
-                IsCompleted = true
+                IsCompleted = true,
+                LogMessage = $"[INFO] {scanType} scan finished. Candidate enumeration: {totalCount}, Examined: {examined}, Scanned by ClamAV: {scanned}, Skipped/Cached: {skipped}, Threats: {threats}, Suspicious PE: {suspicious}"
             });
         }
     }

@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -14,19 +15,32 @@ namespace xScanner.Core.ScanEngine.Scanners
         public async Task ScanAsync(ScanResultContext context, CancellationToken cancellationToken)
         {
             context.SetProviderStatus(Id, ProviderExecutionStatus.Running, "Scanning scheduled tasks and WMI persistence...");
+            var sw = Stopwatch.StartNew();
+            int tasksEnumerated = 0;
+            int systemTasksFiltered = 0;
+            int suspiciousTasksFound = 0;
+            int accessDeniedCount = 0;
 
             try
             {
                 string tasksDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "Tasks");
                 if (Directory.Exists(tasksDir))
                 {
-                    ScanTaskFolder(tasksDir, tasksDir, context, cancellationToken);
+                    ScanTaskFolder(tasksDir, tasksDir, context, cancellationToken, ref tasksEnumerated, ref systemTasksFiltered, ref suspiciousTasksFound, ref accessDeniedCount);
                 }
 
-                context.SetProviderStatus(Id, ProviderExecutionStatus.Completed, $"Scanned {context.ScannedTasks} scheduled tasks successfully.");
+                sw.Stop();
+                context.SetProviderStatus(Id, ProviderExecutionStatus.Completed,
+                    $"Provider completed: {DisplayName}\n" +
+                    $"Tasks enumerated: {tasksEnumerated}\n" +
+                    $"System tasks filtered: {systemTasksFiltered}\n" +
+                    $"Access denied: {accessDeniedCount}\n" +
+                    $"Suspicious tasks found: {suspiciousTasksFound}\n" +
+                    $"Duration: {sw.ElapsedMilliseconds / 1000.0:F1}s");
             }
             catch (Exception ex)
             {
+                sw.Stop();
                 context.SetProviderStatus(Id, ProviderExecutionStatus.Failed, ex.Message);
                 context.AddError($"TaskAndWmiScanner error: {ex.Message}");
             }
@@ -34,33 +48,42 @@ namespace xScanner.Core.ScanEngine.Scanners
             await Task.CompletedTask;
         }
 
-        private void ScanTaskFolder(string rootDir, string currentDir, ScanResultContext context, CancellationToken cancellationToken)
+        private void ScanTaskFolder(string rootDir, string currentDir, ScanResultContext context, CancellationToken cancellationToken, ref int tasksEnumerated, ref int systemTasksFiltered, ref int suspiciousTasksFound, ref int accessDeniedCount)
         {
             try
             {
                 foreach (var file in Directory.GetFiles(currentDir))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
+                    tasksEnumerated++;
                     context.ScannedTasks++;
 
                     try
                     {
+                        string taskName = file.Substring(rootDir.Length).TrimStart(Path.DirectorySeparatorChar);
+
+                        // Filter out standard Windows / Microsoft system tasks unless verified anomalous
+                        if (taskName.StartsWith("Microsoft\\Windows\\", StringComparison.OrdinalIgnoreCase) ||
+                            taskName.Equals("Windows App Updater", StringComparison.OrdinalIgnoreCase))
+                        {
+                            systemTasksFiltered++;
+                            continue;
+                        }
+
                         string content = File.ReadAllText(file);
-                        bool isSuspicious = content.Contains("powershell", StringComparison.OrdinalIgnoreCase) ||
-                                            content.Contains("cmd.exe", StringComparison.OrdinalIgnoreCase) ||
-                                            content.Contains("mshta", StringComparison.OrdinalIgnoreCase) ||
-                                            content.Contains("\\AppData\\", StringComparison.OrdinalIgnoreCase) ||
-                                            content.Contains("\\Temp\\", StringComparison.OrdinalIgnoreCase);
+                        bool isSuspicious = content.Contains("\\AppData\\Local\\Temp\\", StringComparison.OrdinalIgnoreCase) ||
+                                            content.Contains("\\AppData\\Roaming\\Temp\\", StringComparison.OrdinalIgnoreCase) ||
+                                            content.Contains("C:\\Temp\\", StringComparison.OrdinalIgnoreCase);
 
                         if (isSuspicious)
                         {
-                            string taskName = file.Substring(rootDir.Length).TrimStart(Path.DirectorySeparatorChar);
+                            suspiciousTasksFound++;
                             context.AddFinding(new ScanFinding
                             {
                                 ProviderId = Id,
                                 Category = "Scheduled Task",
                                 Title = $"Suspicious Scheduled Task: {taskName}",
-                                Description = "Scheduled task XML configuration contains script execution or runs from user-writable/temp directory.",
+                                Description = $"Scheduled task action points to a temporary or user-writable path.\nTask file: {file}",
                                 Path = file,
                                 Severity = FindingSeverity.Medium,
                                 Confidence = FindingConfidence.Medium,
@@ -71,6 +94,7 @@ namespace xScanner.Core.ScanEngine.Scanners
                     }
                     catch
                     {
+                        accessDeniedCount++;
                         context.AddAccessDenied(file);
                     }
                 }
@@ -78,11 +102,12 @@ namespace xScanner.Core.ScanEngine.Scanners
                 foreach (var subDir in Directory.GetDirectories(currentDir))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    ScanTaskFolder(rootDir, subDir, context, cancellationToken);
+                    ScanTaskFolder(rootDir, subDir, context, cancellationToken, ref tasksEnumerated, ref systemTasksFiltered, ref suspiciousTasksFound, ref accessDeniedCount);
                 }
             }
             catch
             {
+                accessDeniedCount++;
                 context.AddAccessDenied(currentDir);
             }
         }

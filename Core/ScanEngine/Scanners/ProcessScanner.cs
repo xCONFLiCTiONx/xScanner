@@ -1,7 +1,6 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -15,9 +14,12 @@ namespace xScanner.Core.ScanEngine.Scanners
 
         public async Task ScanAsync(ScanResultContext context, CancellationToken cancellationToken)
         {
-            context.SetProviderStatus(Id, ProviderExecutionStatus.Running, "Enumerating running processes...");
+            context.SetProviderStatus(Id, ProviderExecutionStatus.Running, "Enumerating running processes and loaded modules...");
             var sw = Stopwatch.StartNew();
-            int count = 0;
+            int processCount = 0;
+            int moduleCount = 0;
+            int accessDeniedCount = 0;
+            int suspiciousCount = 0;
 
             try
             {
@@ -25,7 +27,7 @@ namespace xScanner.Core.ScanEngine.Scanners
                 foreach (var proc in processes)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    count++;
+                    processCount++;
                     context.ScannedProcesses++;
 
                     string procName = string.Empty;
@@ -41,10 +43,21 @@ namespace xScanner.Core.ScanEngine.Scanners
                     try
                     {
                         executablePath = proc.MainModule?.FileName ?? string.Empty;
+                        try
+                        {
+                            foreach (ProcessModule mod in proc.Modules)
+                            {
+                                moduleCount++;
+                            }
+                        }
+                        catch
+                        {
+                            // Module enumeration access denied for protected processes
+                        }
                     }
                     catch
                     {
-                        // Access denied or system process without main module access
+                        accessDeniedCount++;
                         context.AddAccessDenied($"Process {pid} ({procName})");
                     }
 
@@ -53,6 +66,7 @@ namespace xScanner.Core.ScanEngine.Scanners
                         bool isSuspiciousLocation = IsSuspiciousPath(executablePath);
                         if (isSuspiciousLocation)
                         {
+                            suspiciousCount++;
                             context.AddFinding(new ScanFinding
                             {
                                 ProviderId = Id,
@@ -72,7 +86,13 @@ namespace xScanner.Core.ScanEngine.Scanners
                 }
 
                 sw.Stop();
-                context.SetProviderStatus(Id, ProviderExecutionStatus.Completed, $"Scanned {count} processes successfully.");
+                context.SetProviderStatus(Id, ProviderExecutionStatus.Completed,
+                    $"Provider completed: {DisplayName}\n" +
+                    $"Processes: {processCount}\n" +
+                    $"Modules: {moduleCount}\n" +
+                    $"Access denied: {accessDeniedCount}\n" +
+                    $"Suspicious: {suspiciousCount}\n" +
+                    $"Duration: {sw.ElapsedMilliseconds / 1000.0:F1}s");
             }
             catch (Exception ex)
             {
@@ -89,7 +109,6 @@ namespace xScanner.Core.ScanEngine.Scanners
             if (string.IsNullOrEmpty(path)) return false;
             var lower = path.ToLowerInvariant();
 
-            // Check temp, appdata, downloads, desktop, programdata user-writable areas
             if (lower.Contains("\\temp\\") ||
                 lower.Contains("\\appdata\\local\\temp") ||
                 lower.Contains("\\downloads\\") ||

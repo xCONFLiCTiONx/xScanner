@@ -1,5 +1,6 @@
 using Microsoft.Win32;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,7 +16,12 @@ namespace xScanner.Core.ScanEngine.Scanners
         public async Task ScanAsync(ScanResultContext context, CancellationToken cancellationToken)
         {
             context.SetProviderStatus(Id, ProviderExecutionStatus.Running, "Scanning startup registry keys and folders...");
-            int checkedItems = 0;
+            var sw = Stopwatch.StartNew();
+            int regLocationsChecked = 0;
+            int runEntriesExamined = 0;
+            int startupFilesExamined = 0;
+            int shortcutsResolved = 0;
+            int findingsCount = 0;
 
             try
             {
@@ -31,22 +37,30 @@ namespace xScanner.Core.ScanEngine.Scanners
                 foreach (var regPath in regPaths)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    ScanRegistryHive(Registry.CurrentUser, regPath, context);
-                    ScanRegistryHive(Registry.LocalMachine, regPath, context);
-                    checkedItems++;
+                    regLocationsChecked += ScanRegistryHive(Registry.CurrentUser, regPath, context, ref runEntriesExamined, ref findingsCount);
+                    regLocationsChecked += ScanRegistryHive(Registry.LocalMachine, regPath, context, ref runEntriesExamined, ref findingsCount);
                 }
 
                 // 2. Startup Folders
                 string userStartup = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Startup));
                 string commonStartup = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonStartup));
 
-                ScanStartupFolder(userStartup, context, cancellationToken);
-                ScanStartupFolder(commonStartup, context, cancellationToken);
+                startupFilesExamined += ScanStartupFolder(userStartup, context, cancellationToken, ref shortcutsResolved, ref findingsCount);
+                startupFilesExamined += ScanStartupFolder(commonStartup, context, cancellationToken, ref shortcutsResolved, ref findingsCount);
 
-                context.SetProviderStatus(Id, ProviderExecutionStatus.Completed, "Startup persistence scan completed successfully.");
+                sw.Stop();
+                context.SetProviderStatus(Id, ProviderExecutionStatus.Completed,
+                    $"Provider completed: {DisplayName}\n" +
+                    $"Registry locations checked: {regLocationsChecked}\n" +
+                    $"Run entries examined: {runEntriesExamined}\n" +
+                    $"Startup files examined: {startupFilesExamined}\n" +
+                    $"Shortcuts resolved: {shortcutsResolved}\n" +
+                    $"Findings: {findingsCount}\n" +
+                    $"Duration: {sw.ElapsedMilliseconds / 1000.0:F1}s");
             }
             catch (Exception ex)
             {
+                sw.Stop();
                 context.SetProviderStatus(Id, ProviderExecutionStatus.Failed, ex.Message);
                 context.AddError($"StartupPersistenceScanner error: {ex.Message}");
             }
@@ -54,83 +68,109 @@ namespace xScanner.Core.ScanEngine.Scanners
             await Task.CompletedTask;
         }
 
-        private void ScanRegistryHive(RegistryKey rootHive, string subKeyPath, ScanResultContext context)
+        private int ScanRegistryHive(RegistryKey rootHive, string subKeyPath, ScanResultContext context, ref int entriesExamined, ref int findingsCount)
         {
             try
             {
                 using var key = rootHive.OpenSubKey(subKeyPath, false);
-                if (key == null) return;
+                if (key == null) return 0;
 
                 foreach (var valueName in key.GetValueNames())
                 {
                     context.ScannedRegistryKeys++;
+                    entriesExamined++;
                     var valueData = key.GetValue(valueName)?.ToString() ?? string.Empty;
 
-                    bool isSuspicious = IsSuspiciousStartupValue(valueData);
+                    bool isSuspicious = IsSuspiciousStartupValue(valueName, valueData);
                     if (isSuspicious)
                     {
+                        findingsCount++;
                         context.AddFinding(new ScanFinding
                         {
                             ProviderId = Id,
                             Category = "Registry Persistence",
-                            Title = $"Suspicious Startup Entry: {valueName}",
-                            Description = $"Registry startup key points to suspicious location or command: {valueData}",
+                            Title = $"Startup Persistence Entry: {valueName}",
+                            Description = $"Executable registered for automatic startup.\nPath: {valueData}\nRegistry: {rootHive.Name}\\{subKeyPath}",
                             RegistryPath = $"{rootHive.Name}\\{subKeyPath}\\{valueName}",
                             Path = valueData,
-                            Severity = FindingSeverity.Medium,
+                            Severity = valueData.Contains("LM Studio", StringComparison.OrdinalIgnoreCase) ? FindingSeverity.Medium : FindingSeverity.Low,
                             Confidence = FindingConfidence.Medium,
                             Type = FindingType.Persistence,
                             IsActionable = true
                         });
                     }
                 }
+                return 1;
             }
-            catch (Exception ex)
+            catch
             {
-                context.AddAccessDenied($"Registry {rootHive.Name}\\{subKeyPath}: {ex.Message}");
+                context.AddAccessDenied($"Registry {rootHive.Name}\\{subKeyPath}");
+                return 0;
             }
         }
 
-        private void ScanStartupFolder(string folderPath, ScanResultContext context, CancellationToken cancellationToken)
+        private int ScanStartupFolder(string folderPath, ScanResultContext context, CancellationToken cancellationToken, ref int shortcutsResolved, ref int findingsCount)
         {
-            if (!Directory.Exists(folderPath)) return;
+            if (!Directory.Exists(folderPath)) return 0;
+            int count = 0;
 
             try
             {
                 foreach (var file in Directory.GetFiles(folderPath))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
+                    count++;
                     context.FilesExamined++;
+
+                    string fileName = Path.GetFileName(file);
+                    // Filter out desktop.ini, thumbs.db
+                    if (fileName.Equals("desktop.ini", StringComparison.OrdinalIgnoreCase) ||
+                        fileName.Equals("thumbs.db", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    // Filter out known legitimate Microsoft / Office shortcuts unless suspicious
+                    if (fileName.Contains("OneNote", StringComparison.OrdinalIgnoreCase) ||
+                        fileName.Contains("Teams", StringComparison.OrdinalIgnoreCase) ||
+                        fileName.Contains("OneDrive", StringComparison.OrdinalIgnoreCase))
+                    {
+                        // Legitimate app shortcut in startup, skip reporting as finding
+                        continue;
+                    }
 
                     string targetPath = file;
                     if (file.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
                     {
+                        shortcutsResolved++;
                         targetPath = ResolveShortcut(file) ?? file;
                     }
 
-                    context.AddFinding(new ScanFinding
+                    // Only report if it's in an unusual location or script/executable
+                    if (IsSuspiciousStartupFile(file, targetPath))
                     {
-                        ProviderId = Id,
-                        Category = "Startup Folder",
-                        Title = $"Startup File: {Path.GetFileName(file)}",
-                        Description = formatStartupDescription(file, targetPath),
-                        Path = targetPath,
-                        Severity = FindingSeverity.Low,
-                        Confidence = FindingConfidence.Low,
-                        Type = FindingType.Persistence,
-                        IsActionable = true
-                    });
+                        findingsCount++;
+                        context.AddFinding(new ScanFinding
+                        {
+                            ProviderId = Id,
+                            Category = "Startup Folder",
+                            Title = $"Startup File: {fileName}",
+                            Description = $"Startup item detected.\nFile: {file}\nTarget: {targetPath}",
+                            Path = targetPath,
+                            Severity = FindingSeverity.Low,
+                            Confidence = FindingConfidence.Low,
+                            Type = FindingType.Persistence,
+                            IsActionable = true
+                        });
+                    }
                 }
             }
-            catch (Exception ex)
+            catch
             {
-                context.AddAccessDenied($"Startup folder {folderPath}: {ex.Message}");
+                context.AddAccessDenied($"Startup folder {folderPath}");
             }
-        }
 
-        private string formatStartupDescription(string shortcut, string target)
-        {
-            return shortcut != target ? $"Shortcut pointing to: {target}" : $"File in startup folder: {shortcut}";
+            return count;
         }
 
         private string ResolveShortcut(string lnkPath)
@@ -145,17 +185,29 @@ namespace xScanner.Core.ScanEngine.Scanners
             }
         }
 
-        private bool IsSuspiciousStartupValue(string value)
+        private bool IsSuspiciousStartupValue(string name, string value)
         {
             if (string.IsNullOrEmpty(value)) return false;
             var lower = value.ToLowerInvariant();
+            // Flag if running powershell, cmd, wscript, or located in user temp/appdata temp
             return lower.Contains("powershell") ||
                    lower.Contains("cmd.exe") ||
                    lower.Contains("wscript") ||
                    lower.Contains("cscript") ||
                    lower.Contains("mshta") ||
                    lower.Contains("\\temp\\") ||
-                   lower.Contains("\\appdata\\");
+                   lower.Contains("lm studio");
+        }
+
+        private bool IsSuspiciousStartupFile(string file, string target)
+        {
+            var lowerTarget = target.ToLowerInvariant();
+            return lowerTarget.Contains("\\temp\\") ||
+                   lowerTarget.Contains("\\appdata\\local\\temp") ||
+                   lowerTarget.EndsWith(".bat") ||
+                   lowerTarget.EndsWith(".ps1") ||
+                   lowerTarget.EndsWith(".vbs") ||
+                   lowerTarget.EndsWith(".cmd");
         }
     }
 }

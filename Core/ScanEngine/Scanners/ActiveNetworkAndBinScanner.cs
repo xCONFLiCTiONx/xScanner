@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Net.NetworkInformation;
 using System.Threading;
@@ -15,27 +16,39 @@ namespace xScanner.Core.ScanEngine.Scanners
         public async Task ScanAsync(ScanResultContext context, CancellationToken cancellationToken)
         {
             context.SetProviderStatus(Id, ProviderExecutionStatus.Running, "Inspecting active network connections and high-value directories...");
+            var sw = Stopwatch.StartNew();
+            int tcpConnectionsCount = 0;
+            int udpEndpointsCount = 0;
+            int recentBinariesExamined = 0;
+            int findingsCount = 0;
 
             try
             {
                 var ipProperties = IPGlobalProperties.GetIPGlobalProperties();
                 var tcpConnections = ipProperties.GetActiveTcpConnections();
+                tcpConnectionsCount = tcpConnections.Length;
 
-                foreach (var conn in tcpConnections)
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                }
+                var udpEndpoints = ipProperties.GetActiveUdpListeners();
+                udpEndpointsCount = udpEndpoints.Length;
 
                 string tempDir = Path.GetTempPath();
                 if (Directory.Exists(tempDir))
                 {
-                    ScanRecentFilesInDirectory(tempDir, context, cancellationToken, TimeSpan.FromDays(3));
+                    recentBinariesExamined += ScanRecentFilesInDirectory(tempDir, context, cancellationToken, TimeSpan.FromDays(3), ref findingsCount);
                 }
 
-                context.SetProviderStatus(Id, ProviderExecutionStatus.Completed, "Active network and recent binaries scan completed.");
+                sw.Stop();
+                context.SetProviderStatus(Id, ProviderExecutionStatus.Completed,
+                    $"Provider completed: {DisplayName}\n" +
+                    $"TCP connections: {tcpConnectionsCount}\n" +
+                    $"UDP listeners: {udpEndpointsCount}\n" +
+                    $"Recent binaries examined: {recentBinariesExamined}\n" +
+                    $"Findings: {findingsCount}\n" +
+                    $"Duration: {sw.ElapsedMilliseconds / 1000.0:F1}s");
             }
             catch (Exception ex)
             {
+                sw.Stop();
                 context.SetProviderStatus(Id, ProviderExecutionStatus.Failed, ex.Message);
                 context.AddError($"ActiveNetworkAndBinScanner error: {ex.Message}");
             }
@@ -43,19 +56,22 @@ namespace xScanner.Core.ScanEngine.Scanners
             await Task.CompletedTask;
         }
 
-        private void ScanRecentFilesInDirectory(string dirPath, ScanResultContext context, CancellationToken cancellationToken, TimeSpan maxAge)
+        private int ScanRecentFilesInDirectory(string dirPath, ScanResultContext context, CancellationToken cancellationToken, TimeSpan maxAge, ref int findingsCount)
         {
+            int examined = 0;
             try
             {
                 var di = new DirectoryInfo(dirPath);
                 foreach (var file in di.GetFiles("*.*", SearchOption.TopDirectoryOnly))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
+                    examined++;
                     if (file.LastWriteTime >= DateTime.Now.Subtract(maxAge))
                     {
                         string ext = file.Extension.ToLowerInvariant();
                         if (ext == ".exe" || ext == ".dll" || ext == ".bat" || ext == ".ps1" || ext == ".vbs" || ext == ".scr")
                         {
+                            findingsCount++;
                             context.AddFinding(new ScanFinding
                             {
                                 ProviderId = Id,
@@ -76,6 +92,7 @@ namespace xScanner.Core.ScanEngine.Scanners
             {
                 context.AddAccessDenied(dirPath);
             }
+            return examined;
         }
     }
 }
