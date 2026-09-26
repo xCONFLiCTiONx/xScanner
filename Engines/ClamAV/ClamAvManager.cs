@@ -227,6 +227,9 @@ namespace xScanner.Engines.ClamAV
                         try
                         {
                             using var reg = cancellationToken.Register(() => { try { if (!process.HasExited) process.Kill(true); } catch { } });
+                            var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+                            var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+                            await Task.WhenAll(outputTask, errorTask);
                             await process.WaitForExitAsync(cancellationToken);
                         }
                         catch (OperationCanceledException) { }
@@ -283,6 +286,9 @@ namespace xScanner.Engines.ClamAV
                 try
                 {
                     using var reg = cancellationToken.Register(() => { try { if (!process.HasExited) process.Kill(true); } catch { } });
+                    var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+                    var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+                    await Task.WhenAll(outputTask, errorTask);
                     await process.WaitForExitAsync(cancellationToken);
                     _database.SetSetting("LastDefinitionUpdate", DateTime.Now.ToString("g"));
                     return process.ExitCode == 0;
@@ -338,9 +344,30 @@ namespace xScanner.Engines.ClamAV
                 RegisterProcess(process);
                 try
                 {
-                    using var reg = cancellationToken.Register(() => { try { if (!process.HasExited) process.Kill(true); } catch { } });
-                    string output = await process.StandardOutput.ReadToEndAsync(cancellationToken);
-                    await process.WaitForExitAsync(cancellationToken);
+                    // Use a per-file timeout (e.g. 60 seconds) to prevent hanging on huge or slow files (like large .wav audio files)
+                    using var fileCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                    fileCts.CancelAfter(TimeSpan.FromSeconds(60));
+
+                    using var reg = fileCts.Token.Register(() =>
+                    {
+                        try
+                        {
+                            if (!process.HasExited)
+                            {
+                                process.Kill(true);
+                            }
+                        }
+                        catch { }
+                    });
+
+                    var outputTask = process.StandardOutput.ReadToEndAsync(fileCts.Token);
+                    var errorTask = process.StandardError.ReadToEndAsync(fileCts.Token);
+
+                    await Task.WhenAll(outputTask, errorTask);
+                    await process.WaitForExitAsync(fileCts.Token);
+
+                    string output = outputTask.IsCompletedSuccessfully ? outputTask.Result : string.Empty;
+                    string error = errorTask.IsCompletedSuccessfully ? errorTask.Result : string.Empty;
 
                     if (process.ExitCode == 1)
                     {
@@ -361,7 +388,14 @@ namespace xScanner.Engines.ClamAV
                 }
                 catch (OperationCanceledException)
                 {
-                    return new ScanResultInfo { IsThreat = false, ErrorMessage = "Scan cancelled" };
+                    if (cancellationToken.IsCancellationRequested)
+                    {
+                        return new ScanResultInfo { IsThreat = false, ErrorMessage = "Scan cancelled" };
+                    }
+                    else
+                    {
+                        return new ScanResultInfo { IsThreat = false, ErrorMessage = "Scan timeout (file too large or slow)" };
+                    }
                 }
                 finally
                 {
