@@ -89,7 +89,7 @@ namespace xScanner.Core.Hardening
                 report.CheckResults.Add(CheckLlmnrNetBios());
 
                 // Step 9: PowerShell Logging Audit
-                Log("[AUDIT 9/12] Auditing PowerShell Script Block & Transcription Logging...");
+                Log("[AUDIT 9/12] Auditing PowerShell Script Block & Module Logging...");
                 report.CheckResults.Add(CheckPowerShellLogging());
 
                 // Step 10: Advanced Inbound Ports & RDP NLA
@@ -215,10 +215,9 @@ namespace xScanner.Core.Hardening
                 // 9. PowerShell Logging
                 if (ShouldApply("PS_LOGGING"))
                 {
-                    Log("[ACTION] Enabling PowerShell Script Block, Module and Transcription Logging...");
+                    Log("[ACTION] Enabling PowerShell Script Block and Module Logging...");
                     SetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging", "EnableScriptBlockLogging", 1, RegistryValueKind.DWord);
                     SetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging", "EnableModuleLogging", 1, RegistryValueKind.DWord);
-                    SetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\PowerShell\Transcription", "EnableTranscripting", 1, RegistryValueKind.DWord);
                 }
 
                 // 10. Advanced Ports & RDP NLA
@@ -625,20 +624,18 @@ namespace xScanner.Core.Hardening
             {
                 Id = "PS_LOGGING",
                 Category = "Script & System Audit",
-                Name = "PowerShell Script Block & Transcription Logging",
-                Description = "Ensures advanced PowerShell script block and transcription logging is enabled for forensic audit reviews.",
-                RemediationDescription = "Enables ScriptBlockLogging, ModuleLogging and Transcription in registry."
+                Name = "PowerShell Script Block & Module Logging",
+                Description = "Ensures advanced PowerShell script block and module logging is enabled for forensic audit reviews.",
+                RemediationDescription = "Enables ScriptBlockLogging and ModuleLogging in registry."
             };
 
             try
             {
                 object? sb = GetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\PowerShell\ScriptBlockLogging", "EnableScriptBlockLogging");
                 object? mod = GetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\PowerShell\ModuleLogging", "EnableModuleLogging");
-                object? trans = GetRegistryValue(Registry.LocalMachine, @"SOFTWARE\Policies\Microsoft\Windows\PowerShell\Transcription", "EnableTranscripting");
 
                 bool sbOn = sb is int i1 && i1 == 1;
                 bool modOn = mod is int i2 && i2 == 1;
-                bool transOn = trans is int i3 && i3 == 1;
 
                 if (sbOn && modOn)
                 {
