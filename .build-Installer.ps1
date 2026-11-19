@@ -124,7 +124,7 @@ $issLines = @(
     "Name: `"startupicon`"; Description: `"Start {#AppName} automatically when Windows starts`"$startupTaskFlags",
     "",
     "[Files]",
-    "Source: `"{#SourcePath}\*`"; DestDir: `"{app}`"; Excludes: `"unins*.*`"; Flags: ignoreversion recursesubdirs createallsubdirs",
+    "Source: `"{#SourcePath}\*`"; DestDir: `"{app}`"; Excludes: `"unins*.*,Engines\*,Engines`"; Flags: ignoreversion recursesubdirs createallsubdirs",
     "",
     "[Icons]",
     "Name: `"{userprograms}\{#AppName}`"; Filename: `"{app}\{#AppExeName}`"; WorkingDir: `"{app}`"; Comment: `"{#AppDescription}`"",
